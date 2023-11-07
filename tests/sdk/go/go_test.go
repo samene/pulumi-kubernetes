@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/openapi"
+	"github.com/pulumi/pulumi-kubernetes/tests/v4"
 	"github.com/pulumi/pulumi/pkg/v3/testing/integration"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/stretchr/testify/assert"
@@ -748,5 +749,14 @@ func TestGo(t *testing.T) {
 			},
 		})
 		integration.ProgramTest(t, &test)
+	})
+
+	t.Run("ChartGetResource", func(t *testing.T) {
+		tests.SkipIfShort(t)
+		options := baseOptions.With(integration.ProgramTestOptions{
+			Dir:   filepath.Join(cwd, "helm-get-resources"),
+			Quick: true,
+		})
+		integration.ProgramTest(t, &options)
 	})
 }

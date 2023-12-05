@@ -3,6 +3,11 @@
 package provider
 
 import (
+	"fmt"
+	"os"
+	"strconv"
+	"time"
+
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/clients"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/discovery"
@@ -24,9 +29,17 @@ func (k *KubeConfig) ToDiscoveryClient() (discovery.CachedDiscoveryInterface, er
 	// The more groups you have, the more discovery requests you need to make.
 	// given 25 groups (our groups + a few custom resources) with one-ish version each, discovery needs to make 50 requests
 	// double it just so we don't end up here again for a while.  This config is only used for discovery.
-	c.Burst = 100
+	if discBurst := os.Getenv("PULUMI_K8S_CLIENT_DISCOVERY_BURST"); discBurst != "" {
+		burst, err := strconv.Atoi(discBurst)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value specified for PULUMI_K8S_CLIENT_DISCOVERY_BURST: %w", err)
+		}
+		c.Burst = burst
+	} else {
+		c.Burst = 200
+	}
 
-	return clients.NewMemCacheClient(discovery.NewDiscoveryClientForConfigOrDie(c)), nil
+	return clients.NewCachedDiscoveryClient(discovery.NewDiscoveryClientForConfigOrDie(c), "~/.kube/cache/discovery/"+k.restConfig.Host, 20*time.Minute), nil
 }
 
 // ToRESTConfig implemented interface method

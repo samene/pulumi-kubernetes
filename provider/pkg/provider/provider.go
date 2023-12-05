@@ -717,8 +717,8 @@ func (k *kubeProvider) Configure(_ context.Context, req *pulumirpc.ConfigureRequ
 			return nil, fmt.Errorf("invalid value specified for PULUMI_K8S_CLIENT_BURST: %w", err)
 		}
 		kubeClientSettings.Burst = &asInt
-	} else {
-		v := 120 // Increased from default value of 10
+	} else if kubeClientSettings.Burst == nil {
+		v := 120
 		kubeClientSettings.Burst = &v
 	}
 
@@ -728,7 +728,7 @@ func (k *kubeProvider) Configure(_ context.Context, req *pulumirpc.ConfigureRequ
 			return nil, fmt.Errorf("invalid value specified for PULUMI_K8S_CLIENT_QPS: %w", err)
 		}
 		kubeClientSettings.QPS = &asFloat
-	} else {
+	} else if kubeClientSettings.QPS == nil {
 		v := 50.0 // Increased from default value of 5.0
 		kubeClientSettings.QPS = &v
 	}

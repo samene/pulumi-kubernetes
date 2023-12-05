@@ -25,10 +25,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
 )
 
 var scheme = runtime.NewScheme()
+var Codecs = serializer.NewCodecFactory(scheme)
 
 // FromUnstructured dynamically converts an Unstructured Kubernetes resource into the typed equivalent. Only built-in
 // resource types are supported, so CustomResources will fail conversion with an error.

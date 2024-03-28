@@ -14,14 +14,14 @@
 
 import * as k8s from "@pulumi/kubernetes";
 
-export const namespace = new k8s.core.v1.Namespace("test-namespace");
+const namespace = new k8s.core.v1.Namespace("test-namespace");
 
 //
 // The image in the Pod's container has changed, triggering a replace. Because `.metadata.name` is
 // not specified, Pulumi again will provide a name upon creation of the new Pod resource.
 //
 
-const pod = new k8s.core.v1.Pod("autonaming-test", {
+export const pod = new k8s.core.v1.Pod("autonaming-test", {
   metadata: {
     namespace: namespace.metadata.name,
   },

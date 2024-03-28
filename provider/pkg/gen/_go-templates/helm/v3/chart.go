@@ -244,26 +244,23 @@ func NewChart(ctx *pulumi.Context,
 		},
 	})
 
-	var resourceOrInvokeOptions []pulumi.ResourceOrInvokeOption
-	for _, o := range opts {
-		if asResOrInv, ok := o.(pulumi.ResourceOrInvokeOption); ok {
-			resourceOrInvokeOptions = append(resourceOrInvokeOptions, asResOrInv)
-		}
-	}
 	opts = append(opts, aliases)
 	err := ctx.RegisterComponentResource("kubernetes:helm.sh/v3:Chart", name, chart, opts...)
 	if err != nil {
 		return nil, err
 	}
 
-	// Honor the resource name prefix if specified.
+	releaseName := name
 	if args.ResourcePrefix != "" {
-		name = args.ResourcePrefix + "-" + name
+		releaseName = args.ResourcePrefix + "-" + name
 	}
 
-	resourceOrInvokeOptions = append(resourceOrInvokeOptions, pulumi.Parent(chart))
+	parseOpts, err := yaml.GetChildOptions(chart, opts)
+	if err != nil {
+		return nil, err
+	}
 	resources := args.ToChartArgsOutput().ApplyT(func(args chartArgs) (map[string]pulumi.Resource, error) {
-		return parseChart(ctx, name, args, resourceOrInvokeOptions...)
+		return parseChart(ctx, releaseName, args, parseOpts...)
 	})
 	chart.Resources = resources
 
@@ -287,7 +284,7 @@ func NewChart(ctx *pulumi.Context,
 	return chart, nil
 }
 
-func parseChart(ctx *pulumi.Context, name string, args chartArgs, opts ...pulumi.ResourceOrInvokeOption,
+func parseChart(ctx *pulumi.Context, releaseName string, args chartArgs, opts ...pulumi.ResourceOption,
 ) (map[string]pulumi.Resource, error) {
 	type jsonOptsArgs struct {
 		chartArgs
@@ -296,7 +293,7 @@ func parseChart(ctx *pulumi.Context, name string, args chartArgs, opts ...pulumi
 	}
 	jsonOpts := jsonOptsArgs{
 		chartArgs:   args,
-		ReleaseName: name,
+		ReleaseName: releaseName,
 	}
 
 	b, err := json.Marshal(jsonOpts)
@@ -304,11 +301,9 @@ func parseChart(ctx *pulumi.Context, name string, args chartArgs, opts ...pulumi
 		return nil, err
 	}
 
-	var invokeOpts []pulumi.InvokeOption
-	var resourceOpts []pulumi.ResourceOption
-	for _, o := range opts {
-		invokeOpts = append(invokeOpts, o)
-		resourceOpts = append(resourceOpts, o)
+	invokeOpts, err := yaml.GetInvokeOptions(opts)
+	if err != nil {
+		return nil, err
 	}
 	objs, err := helmTemplate(ctx, string(b), invokeOpts...)
 	if err != nil {
@@ -320,7 +315,7 @@ func parseChart(ctx *pulumi.Context, name string, args chartArgs, opts ...pulumi
 		transformations = yaml.AddSkipAwaitTransformation(transformations)
 	}
 
-	resources, err := yaml.ParseYamlObjects(ctx, objs, transformations, args.ResourcePrefix, resourceOpts...)
+	resources, err := yaml.ParseYamlObjects(ctx, objs, transformations, args.ResourcePrefix, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -351,9 +346,23 @@ func (c *Chart) GetResource(gvk, name, namespace string) pulumi.AnyOutput {
 	if len(namespace) > 0 && namespace != "default" {
 		id = fmt.Sprintf("%s/%s", namespace, name)
 	}
+
 	key := fmt.Sprintf("%s::%s", gvk, id)
+
 	return c.Resources.ApplyT(func(x interface{}) interface{} {
 		resources := x.(map[string]pulumi.Resource)
-		return resources[key]
+		if r, ok := resources[key]; ok {
+			return r
+		}
+
+		// Some resources in the default namespace do not adhere to the name only pattern, so we need to fallback
+		// to searching for the resource by namespace and name. This occurs when the Helm template manifest explicitly
+		// sets the namespace field on the resource.
+		if namespace == "default" || namespace == "" {
+			return resources[fmt.Sprintf("%s::default/%s", gvk, name)]
+		}
+
+		return nil
+
 	}).(pulumi.AnyOutput)
 }

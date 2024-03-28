@@ -179,22 +179,18 @@ class ConfigGroup(pulumi.ComponentResource):
             else:
                 _files += [f for f in glob(file)]
 
-        opts = pulumi.ResourceOptions.merge(opts, pulumi.ResourceOptions(parent=self))
+        child_opts = _get_child_options(self, opts)
 
         for file in _files:
             cf = ConfigFile(
-                file, file_id=file, transformations=transformations, resource_prefix=resource_prefix, opts=opts)
+                file, file_id=file, transformations=transformations, resource_prefix=resource_prefix, opts=child_opts)
             # Add any new ConfigFile resources to the ConfigGroup's resources
             self.resources = pulumi.Output.all(cf.resources, self.resources).apply(lambda x: {**x[0], **x[1]})
 
         for text in yaml:
-            # Rather than using the default provider for the following invoke call, use the version specified
-            # in package.json.
-            invoke_opts = pulumi.InvokeOptions(version=_utilities.get_version(),
-                                               provider=opts.provider if opts.provider else None)
-
-            __ret__ = invoke_yaml_decode(text, invoke_opts)
-            resources = _parse_yaml_document(__ret__, opts, transformations, resource_prefix)
+            invoke_opts = _get_invoke_options(child_opts)
+            decoded = pulumi.Output.from_input(_invoke_yaml_decode_async(text, invoke_opts))
+            resources = decoded.apply(lambda x: _parse_yaml_document(x, child_opts, transformations, resource_prefix))
             # Add any new YAML resources to the ConfigGroup's resources
             self.resources = pulumi.Output.all(resources, self.resources).apply(lambda x: {**x[0], **x[1]})
 
@@ -334,23 +330,19 @@ class ConfigFile(pulumi.ComponentResource):
         else:
             text = _read_file(file)
 
-        opts = pulumi.ResourceOptions.merge(opts, pulumi.ResourceOptions(parent=self))
+        child_opts = _get_child_options(self, opts)
 
         transformations = transformations if transformations is not None else []
         if skip_await:
             transformations.append(_skip_await)
-
-        # Rather than using the default provider for the following invoke call, use the version specified
-        # in package.json.
-        invoke_opts = pulumi.InvokeOptions(version=_utilities.get_version(),
-                                           provider=opts.provider if opts.provider else None)
-
-        __ret__ = invoke_yaml_decode(text, invoke_opts)
+ 
+        invoke_opts = _get_invoke_options(child_opts)
+        decoded = pulumi.Output.from_input(_invoke_yaml_decode_async(text, invoke_opts))
 
         # Note: Unlike NodeJS, Python requires that we "pull" on our futures in order to get them scheduled for
         # execution. In order to do this, we leverage the engine's RegisterResourceOutputs to wait for the
         # resolution of all resources that this YAML document created.
-        self.resources = _parse_yaml_document(__ret__, opts, transformations, resource_prefix)
+        self.resources = decoded.apply(lambda x: _parse_yaml_document(x, child_opts, transformations, resource_prefix))
         self.register_outputs({"resources": self.resources})
 
     def translate_output_property(self, prop: str) -> str:
@@ -410,7 +402,26 @@ def _read_file(path: str) -> str:
 def _build_resources_dict(objs: Sequence[pulumi.Output]) -> Mapping[pulumi.Output, pulumi.Output]:
     return {key: value for key, value in objs}
 
+def _get_child_options(parent: pulumi.Resource, opts: pulumi.ResourceOptions):
+    if not opts:
+        opts = pulumi.ResourceOptions()
+    child_opts = pulumi.ResourceOptions(parent=parent)
+    if opts.version is not None:
+        child_opts.version = opts.version
+    if opts.plugin_download_url is not None:
+        child_opts.plugin_download_url = opts.plugin_download_url
+    return child_opts
 
+def _get_invoke_options(opts: pulumi.ResourceOptions):
+    if not opts:
+        opts = pulumi.ResourceOptions()
+    return pulumi.InvokeOptions(
+        parent=opts.parent if opts.parent else None,
+        provider=opts.provider if opts.provider else None,
+        version=_utilities.get_version() if not opts.version else opts.version,
+        plugin_download_url=opts.plugin_download_url if opts.plugin_download_url else None
+     )
+     
 def _parse_yaml_document(
         objects, opts: Optional[pulumi.ResourceOptions] = None,
         transformations: Optional[Sequence[Callable]] = None,
@@ -1251,6 +1262,30 @@ def _parse_yaml_object(
         return [identifier.apply(
             lambda x: (f"extensions/v1beta1/ReplicaSetList:{x}",
                        ReplicaSetList(f"{x}", opts, **obj)))]
+    if gvk == "flowcontrol.apiserver.k8s.io/v1/FlowSchema":
+        # Import locally to avoid name collisions.
+        from pulumi_kubernetes.flowcontrol.v1 import FlowSchema
+        return [identifier.apply(
+            lambda x: (f"flowcontrol.apiserver.k8s.io/v1/FlowSchema:{x}",
+                       FlowSchema(f"{x}", opts, **obj)))]
+    if gvk == "flowcontrol.apiserver.k8s.io/v1/FlowSchemaList":
+        # Import locally to avoid name collisions.
+        from pulumi_kubernetes.flowcontrol.v1 import FlowSchemaList
+        return [identifier.apply(
+            lambda x: (f"flowcontrol.apiserver.k8s.io/v1/FlowSchemaList:{x}",
+                       FlowSchemaList(f"{x}", opts, **obj)))]
+    if gvk == "flowcontrol.apiserver.k8s.io/v1/PriorityLevelConfiguration":
+        # Import locally to avoid name collisions.
+        from pulumi_kubernetes.flowcontrol.v1 import PriorityLevelConfiguration
+        return [identifier.apply(
+            lambda x: (f"flowcontrol.apiserver.k8s.io/v1/PriorityLevelConfiguration:{x}",
+                       PriorityLevelConfiguration(f"{x}", opts, **obj)))]
+    if gvk == "flowcontrol.apiserver.k8s.io/v1/PriorityLevelConfigurationList":
+        # Import locally to avoid name collisions.
+        from pulumi_kubernetes.flowcontrol.v1 import PriorityLevelConfigurationList
+        return [identifier.apply(
+            lambda x: (f"flowcontrol.apiserver.k8s.io/v1/PriorityLevelConfigurationList:{x}",
+                       PriorityLevelConfigurationList(f"{x}", opts, **obj)))]
     if gvk == "flowcontrol.apiserver.k8s.io/v1alpha1/FlowSchema":
         # Import locally to avoid name collisions.
         from pulumi_kubernetes.flowcontrol.v1alpha1 import FlowSchema
@@ -1413,6 +1448,18 @@ def _parse_yaml_object(
         return [identifier.apply(
             lambda x: (f"networking.k8s.io/v1alpha1/IPAddressList:{x}",
                        IPAddressList(f"{x}", opts, **obj)))]
+    if gvk == "networking.k8s.io/v1alpha1/ServiceCIDR":
+        # Import locally to avoid name collisions.
+        from pulumi_kubernetes.networking.v1alpha1 import ServiceCIDR
+        return [identifier.apply(
+            lambda x: (f"networking.k8s.io/v1alpha1/ServiceCIDR:{x}",
+                       ServiceCIDR(f"{x}", opts, **obj)))]
+    if gvk == "networking.k8s.io/v1alpha1/ServiceCIDRList":
+        # Import locally to avoid name collisions.
+        from pulumi_kubernetes.networking.v1alpha1 import ServiceCIDRList
+        return [identifier.apply(
+            lambda x: (f"networking.k8s.io/v1alpha1/ServiceCIDRList:{x}",
+                       ServiceCIDRList(f"{x}", opts, **obj)))]
     if gvk == "networking.k8s.io/v1beta1/Ingress":
         # Import locally to avoid name collisions.
         from pulumi_kubernetes.networking.v1beta1 import Ingress
@@ -1869,6 +1916,18 @@ def _parse_yaml_object(
         return [identifier.apply(
             lambda x: (f"storage.k8s.io/v1alpha1/VolumeAttachmentList:{x}",
                        VolumeAttachmentList(f"{x}", opts, **obj)))]
+    if gvk == "storage.k8s.io/v1alpha1/VolumeAttributesClass":
+        # Import locally to avoid name collisions.
+        from pulumi_kubernetes.storage.v1alpha1 import VolumeAttributesClass
+        return [identifier.apply(
+            lambda x: (f"storage.k8s.io/v1alpha1/VolumeAttributesClass:{x}",
+                       VolumeAttributesClass(f"{x}", opts, **obj)))]
+    if gvk == "storage.k8s.io/v1alpha1/VolumeAttributesClassList":
+        # Import locally to avoid name collisions.
+        from pulumi_kubernetes.storage.v1alpha1 import VolumeAttributesClassList
+        return [identifier.apply(
+            lambda x: (f"storage.k8s.io/v1alpha1/VolumeAttributesClassList:{x}",
+                       VolumeAttributesClassList(f"{x}", opts, **obj)))]
     if gvk == "storage.k8s.io/v1beta1/CSIDriver":
         # Import locally to avoid name collisions.
         from pulumi_kubernetes.storage.v1beta1 import CSIDriver
@@ -1947,6 +2006,6 @@ def _parse_yaml_object(
         lambda x: (f"{gvk}:{x}",
                    CustomResource(f"{x}", api_version, kind, spec, metadata, opts)))]
 
-def invoke_yaml_decode(text, invoke_opts):
-    inv = pulumi.runtime.invoke('kubernetes:yaml:decode', {'text': text}, invoke_opts)
-    return (inv.value or {}).get('result', [])
+async def _invoke_yaml_decode_async(text, invoke_opts):
+    inv = await pulumi.runtime.invoke_async('kubernetes:yaml:decode', {'text': text}, invoke_opts)
+    return (inv or {}).get('result', [])

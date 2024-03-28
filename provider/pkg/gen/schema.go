@@ -223,11 +223,13 @@ func PulumiSchema(swagger map[string]any) pschema.PackageSpec {
 		"helm.sh/v2":    "Helm.V2",
 		"helm.sh/v3":    "Helm.V3",
 		"yaml":          "Yaml",
+		"yaml/v2":       "Yaml.V2",
 		"":              "Provider",
 	}
 	javaPackages := map[string]string{
 		"helm.sh/v2": "helm.v2",
 		"helm.sh/v3": "helm.v3",
+		"yaml/v2":    "yaml.v2",
 	}
 	modToPkg := map[string]string{
 		"apiextensions.k8s.io": "apiextensions",
@@ -237,6 +239,7 @@ func PulumiSchema(swagger map[string]any) pschema.PackageSpec {
 	}
 	pkgImportAliases := map[string]string{
 		"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/helm/v3": "helmv3",
+		"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/yaml/v2": "yamlv2",
 	}
 
 	definitions := swagger["definitions"].(map[string]any)
@@ -490,8 +493,7 @@ additional information about using Server-Side Apply to manage Kubernetes resour
 			"shell-quote":       "^1.6.1",
 			"tmp":               "^0.0.33",
 			"@types/tmp":        "^0.0.33",
-			"glob":              "^7.1.2",
-			"@types/glob":       "^5.0.35",
+			"glob":              "^10.3.10",
 			"node-fetch":        "^2.3.0",
 			"@types/node-fetch": "^2.1.4",
 		},
@@ -519,7 +521,7 @@ Use the navigation below to see detailed documentation for each of the supported
 	})
 	pkg.Language["python"] = rawMessage(map[string]any{
 		"requires": map[string]string{
-			"pulumi":   ">=3.25.0,<4.0.0",
+			"pulumi":   ">=3.109.0,<4.0.0",
 			"requests": ">=2.21,<3.0",
 		},
 		"pyproject": map[string]bool{

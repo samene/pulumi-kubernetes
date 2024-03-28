@@ -11,7 +11,6 @@ import (
 	metav1 "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/meta/v1"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/utilities"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumix"
 )
 
 var _ = utilities.GetEnvOrDefault
@@ -71,12 +70,6 @@ func (i VolumeAttachmentTypeArgs) ToVolumeAttachmentTypeOutputWithContext(ctx co
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttachmentTypeOutput)
 }
 
-func (i VolumeAttachmentTypeArgs) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentType] {
-	return pulumix.Output[VolumeAttachmentType]{
-		OutputState: i.ToVolumeAttachmentTypeOutputWithContext(ctx).OutputState,
-	}
-}
-
 // VolumeAttachmentTypeArrayInput is an input type that accepts VolumeAttachmentTypeArray and VolumeAttachmentTypeArrayOutput values.
 // You can construct a concrete instance of `VolumeAttachmentTypeArrayInput` via:
 //
@@ -102,12 +95,6 @@ func (i VolumeAttachmentTypeArray) ToVolumeAttachmentTypeArrayOutputWithContext(
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttachmentTypeArrayOutput)
 }
 
-func (i VolumeAttachmentTypeArray) ToOutput(ctx context.Context) pulumix.Output[[]VolumeAttachmentType] {
-	return pulumix.Output[[]VolumeAttachmentType]{
-		OutputState: i.ToVolumeAttachmentTypeArrayOutputWithContext(ctx).OutputState,
-	}
-}
-
 // VolumeAttachment captures the intent to attach or detach the specified volume to/from the specified node.
 //
 // VolumeAttachment objects are non-namespaced.
@@ -123,12 +110,6 @@ func (o VolumeAttachmentTypeOutput) ToVolumeAttachmentTypeOutput() VolumeAttachm
 
 func (o VolumeAttachmentTypeOutput) ToVolumeAttachmentTypeOutputWithContext(ctx context.Context) VolumeAttachmentTypeOutput {
 	return o
-}
-
-func (o VolumeAttachmentTypeOutput) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentType] {
-	return pulumix.Output[VolumeAttachmentType]{
-		OutputState: o.OutputState,
-	}
 }
 
 // APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
@@ -168,12 +149,6 @@ func (o VolumeAttachmentTypeArrayOutput) ToVolumeAttachmentTypeArrayOutput() Vol
 
 func (o VolumeAttachmentTypeArrayOutput) ToVolumeAttachmentTypeArrayOutputWithContext(ctx context.Context) VolumeAttachmentTypeArrayOutput {
 	return o
-}
-
-func (o VolumeAttachmentTypeArrayOutput) ToOutput(ctx context.Context) pulumix.Output[[]VolumeAttachmentType] {
-	return pulumix.Output[[]VolumeAttachmentType]{
-		OutputState: o.OutputState,
-	}
 }
 
 func (o VolumeAttachmentTypeArrayOutput) Index(i pulumi.IntInput) VolumeAttachmentTypeOutput {
@@ -229,12 +204,6 @@ func (i VolumeAttachmentListTypeArgs) ToVolumeAttachmentListTypeOutputWithContex
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttachmentListTypeOutput)
 }
 
-func (i VolumeAttachmentListTypeArgs) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentListType] {
-	return pulumix.Output[VolumeAttachmentListType]{
-		OutputState: i.ToVolumeAttachmentListTypeOutputWithContext(ctx).OutputState,
-	}
-}
-
 // VolumeAttachmentList is a collection of VolumeAttachment objects.
 type VolumeAttachmentListTypeOutput struct{ *pulumi.OutputState }
 
@@ -248,12 +217,6 @@ func (o VolumeAttachmentListTypeOutput) ToVolumeAttachmentListTypeOutput() Volum
 
 func (o VolumeAttachmentListTypeOutput) ToVolumeAttachmentListTypeOutputWithContext(ctx context.Context) VolumeAttachmentListTypeOutput {
 	return o
-}
-
-func (o VolumeAttachmentListTypeOutput) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentListType] {
-	return pulumix.Output[VolumeAttachmentListType]{
-		OutputState: o.OutputState,
-	}
 }
 
 // APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
@@ -331,12 +294,6 @@ func (i VolumeAttachmentPatchTypeArgs) ToVolumeAttachmentPatchTypeOutputWithCont
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttachmentPatchTypeOutput)
 }
 
-func (i VolumeAttachmentPatchTypeArgs) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentPatchType] {
-	return pulumix.Output[VolumeAttachmentPatchType]{
-		OutputState: i.ToVolumeAttachmentPatchTypeOutputWithContext(ctx).OutputState,
-	}
-}
-
 // VolumeAttachment captures the intent to attach or detach the specified volume to/from the specified node.
 //
 // VolumeAttachment objects are non-namespaced.
@@ -352,12 +309,6 @@ func (o VolumeAttachmentPatchTypeOutput) ToVolumeAttachmentPatchTypeOutput() Vol
 
 func (o VolumeAttachmentPatchTypeOutput) ToVolumeAttachmentPatchTypeOutputWithContext(ctx context.Context) VolumeAttachmentPatchTypeOutput {
 	return o
-}
-
-func (o VolumeAttachmentPatchTypeOutput) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentPatchType] {
-	return pulumix.Output[VolumeAttachmentPatchType]{
-		OutputState: o.OutputState,
-	}
 }
 
 // APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
@@ -424,12 +375,6 @@ func (i VolumeAttachmentSourceArgs) ToVolumeAttachmentSourceOutputWithContext(ct
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttachmentSourceOutput)
 }
 
-func (i VolumeAttachmentSourceArgs) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentSource] {
-	return pulumix.Output[VolumeAttachmentSource]{
-		OutputState: i.ToVolumeAttachmentSourceOutputWithContext(ctx).OutputState,
-	}
-}
-
 // VolumeAttachmentSource represents a volume that should be attached. Right now only PersistenVolumes can be attached via external attacher, in future we may allow also inline volumes in pods. Exactly one member can be set.
 type VolumeAttachmentSourceOutput struct{ *pulumi.OutputState }
 
@@ -443,12 +388,6 @@ func (o VolumeAttachmentSourceOutput) ToVolumeAttachmentSourceOutput() VolumeAtt
 
 func (o VolumeAttachmentSourceOutput) ToVolumeAttachmentSourceOutputWithContext(ctx context.Context) VolumeAttachmentSourceOutput {
 	return o
-}
-
-func (o VolumeAttachmentSourceOutput) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentSource] {
-	return pulumix.Output[VolumeAttachmentSource]{
-		OutputState: o.OutputState,
-	}
 }
 
 // inlineVolumeSpec contains all the information necessary to attach a persistent volume defined by a pod's inline VolumeSource. This field is populated only for the CSIMigration feature. It contains translated fields from a pod's inline VolumeSource to a PersistentVolumeSpec. This field is alpha-level and is only honored by servers that enabled the CSIMigration feature.
@@ -500,12 +439,6 @@ func (i VolumeAttachmentSourcePatchArgs) ToVolumeAttachmentSourcePatchOutputWith
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttachmentSourcePatchOutput)
 }
 
-func (i VolumeAttachmentSourcePatchArgs) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentSourcePatch] {
-	return pulumix.Output[VolumeAttachmentSourcePatch]{
-		OutputState: i.ToVolumeAttachmentSourcePatchOutputWithContext(ctx).OutputState,
-	}
-}
-
 func (i VolumeAttachmentSourcePatchArgs) ToVolumeAttachmentSourcePatchPtrOutput() VolumeAttachmentSourcePatchPtrOutput {
 	return i.ToVolumeAttachmentSourcePatchPtrOutputWithContext(context.Background())
 }
@@ -547,12 +480,6 @@ func (i *volumeAttachmentSourcePatchPtrType) ToVolumeAttachmentSourcePatchPtrOut
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttachmentSourcePatchPtrOutput)
 }
 
-func (i *volumeAttachmentSourcePatchPtrType) ToOutput(ctx context.Context) pulumix.Output[*VolumeAttachmentSourcePatch] {
-	return pulumix.Output[*VolumeAttachmentSourcePatch]{
-		OutputState: i.ToVolumeAttachmentSourcePatchPtrOutputWithContext(ctx).OutputState,
-	}
-}
-
 // VolumeAttachmentSource represents a volume that should be attached. Right now only PersistenVolumes can be attached via external attacher, in future we may allow also inline volumes in pods. Exactly one member can be set.
 type VolumeAttachmentSourcePatchOutput struct{ *pulumi.OutputState }
 
@@ -578,12 +505,6 @@ func (o VolumeAttachmentSourcePatchOutput) ToVolumeAttachmentSourcePatchPtrOutpu
 	}).(VolumeAttachmentSourcePatchPtrOutput)
 }
 
-func (o VolumeAttachmentSourcePatchOutput) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentSourcePatch] {
-	return pulumix.Output[VolumeAttachmentSourcePatch]{
-		OutputState: o.OutputState,
-	}
-}
-
 // inlineVolumeSpec contains all the information necessary to attach a persistent volume defined by a pod's inline VolumeSource. This field is populated only for the CSIMigration feature. It contains translated fields from a pod's inline VolumeSource to a PersistentVolumeSpec. This field is alpha-level and is only honored by servers that enabled the CSIMigration feature.
 func (o VolumeAttachmentSourcePatchOutput) InlineVolumeSpec() corev1.PersistentVolumeSpecPatchPtrOutput {
 	return o.ApplyT(func(v VolumeAttachmentSourcePatch) *corev1.PersistentVolumeSpecPatch { return v.InlineVolumeSpec }).(corev1.PersistentVolumeSpecPatchPtrOutput)
@@ -606,12 +527,6 @@ func (o VolumeAttachmentSourcePatchPtrOutput) ToVolumeAttachmentSourcePatchPtrOu
 
 func (o VolumeAttachmentSourcePatchPtrOutput) ToVolumeAttachmentSourcePatchPtrOutputWithContext(ctx context.Context) VolumeAttachmentSourcePatchPtrOutput {
 	return o
-}
-
-func (o VolumeAttachmentSourcePatchPtrOutput) ToOutput(ctx context.Context) pulumix.Output[*VolumeAttachmentSourcePatch] {
-	return pulumix.Output[*VolumeAttachmentSourcePatch]{
-		OutputState: o.OutputState,
-	}
 }
 
 func (o VolumeAttachmentSourcePatchPtrOutput) Elem() VolumeAttachmentSourcePatchOutput {
@@ -687,12 +602,6 @@ func (i VolumeAttachmentSpecArgs) ToVolumeAttachmentSpecOutputWithContext(ctx co
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttachmentSpecOutput)
 }
 
-func (i VolumeAttachmentSpecArgs) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentSpec] {
-	return pulumix.Output[VolumeAttachmentSpec]{
-		OutputState: i.ToVolumeAttachmentSpecOutputWithContext(ctx).OutputState,
-	}
-}
-
 // VolumeAttachmentSpec is the specification of a VolumeAttachment request.
 type VolumeAttachmentSpecOutput struct{ *pulumi.OutputState }
 
@@ -706,12 +615,6 @@ func (o VolumeAttachmentSpecOutput) ToVolumeAttachmentSpecOutput() VolumeAttachm
 
 func (o VolumeAttachmentSpecOutput) ToVolumeAttachmentSpecOutputWithContext(ctx context.Context) VolumeAttachmentSpecOutput {
 	return o
-}
-
-func (o VolumeAttachmentSpecOutput) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentSpec] {
-	return pulumix.Output[VolumeAttachmentSpec]{
-		OutputState: o.OutputState,
-	}
 }
 
 // Attacher indicates the name of the volume driver that MUST handle this request. This is the name returned by GetPluginName().
@@ -772,12 +675,6 @@ func (i VolumeAttachmentSpecPatchArgs) ToVolumeAttachmentSpecPatchOutputWithCont
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttachmentSpecPatchOutput)
 }
 
-func (i VolumeAttachmentSpecPatchArgs) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentSpecPatch] {
-	return pulumix.Output[VolumeAttachmentSpecPatch]{
-		OutputState: i.ToVolumeAttachmentSpecPatchOutputWithContext(ctx).OutputState,
-	}
-}
-
 func (i VolumeAttachmentSpecPatchArgs) ToVolumeAttachmentSpecPatchPtrOutput() VolumeAttachmentSpecPatchPtrOutput {
 	return i.ToVolumeAttachmentSpecPatchPtrOutputWithContext(context.Background())
 }
@@ -819,12 +716,6 @@ func (i *volumeAttachmentSpecPatchPtrType) ToVolumeAttachmentSpecPatchPtrOutputW
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttachmentSpecPatchPtrOutput)
 }
 
-func (i *volumeAttachmentSpecPatchPtrType) ToOutput(ctx context.Context) pulumix.Output[*VolumeAttachmentSpecPatch] {
-	return pulumix.Output[*VolumeAttachmentSpecPatch]{
-		OutputState: i.ToVolumeAttachmentSpecPatchPtrOutputWithContext(ctx).OutputState,
-	}
-}
-
 // VolumeAttachmentSpec is the specification of a VolumeAttachment request.
 type VolumeAttachmentSpecPatchOutput struct{ *pulumi.OutputState }
 
@@ -848,12 +739,6 @@ func (o VolumeAttachmentSpecPatchOutput) ToVolumeAttachmentSpecPatchPtrOutputWit
 	return o.ApplyTWithContext(ctx, func(_ context.Context, v VolumeAttachmentSpecPatch) *VolumeAttachmentSpecPatch {
 		return &v
 	}).(VolumeAttachmentSpecPatchPtrOutput)
-}
-
-func (o VolumeAttachmentSpecPatchOutput) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentSpecPatch] {
-	return pulumix.Output[VolumeAttachmentSpecPatch]{
-		OutputState: o.OutputState,
-	}
 }
 
 // Attacher indicates the name of the volume driver that MUST handle this request. This is the name returned by GetPluginName().
@@ -883,12 +768,6 @@ func (o VolumeAttachmentSpecPatchPtrOutput) ToVolumeAttachmentSpecPatchPtrOutput
 
 func (o VolumeAttachmentSpecPatchPtrOutput) ToVolumeAttachmentSpecPatchPtrOutputWithContext(ctx context.Context) VolumeAttachmentSpecPatchPtrOutput {
 	return o
-}
-
-func (o VolumeAttachmentSpecPatchPtrOutput) ToOutput(ctx context.Context) pulumix.Output[*VolumeAttachmentSpecPatch] {
-	return pulumix.Output[*VolumeAttachmentSpecPatch]{
-		OutputState: o.OutputState,
-	}
 }
 
 func (o VolumeAttachmentSpecPatchPtrOutput) Elem() VolumeAttachmentSpecPatchOutput {
@@ -978,12 +857,6 @@ func (i VolumeAttachmentStatusArgs) ToVolumeAttachmentStatusOutputWithContext(ct
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttachmentStatusOutput)
 }
 
-func (i VolumeAttachmentStatusArgs) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentStatus] {
-	return pulumix.Output[VolumeAttachmentStatus]{
-		OutputState: i.ToVolumeAttachmentStatusOutputWithContext(ctx).OutputState,
-	}
-}
-
 func (i VolumeAttachmentStatusArgs) ToVolumeAttachmentStatusPtrOutput() VolumeAttachmentStatusPtrOutput {
 	return i.ToVolumeAttachmentStatusPtrOutputWithContext(context.Background())
 }
@@ -1025,12 +898,6 @@ func (i *volumeAttachmentStatusPtrType) ToVolumeAttachmentStatusPtrOutputWithCon
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttachmentStatusPtrOutput)
 }
 
-func (i *volumeAttachmentStatusPtrType) ToOutput(ctx context.Context) pulumix.Output[*VolumeAttachmentStatus] {
-	return pulumix.Output[*VolumeAttachmentStatus]{
-		OutputState: i.ToVolumeAttachmentStatusPtrOutputWithContext(ctx).OutputState,
-	}
-}
-
 // VolumeAttachmentStatus is the status of a VolumeAttachment request.
 type VolumeAttachmentStatusOutput struct{ *pulumi.OutputState }
 
@@ -1054,12 +921,6 @@ func (o VolumeAttachmentStatusOutput) ToVolumeAttachmentStatusPtrOutputWithConte
 	return o.ApplyTWithContext(ctx, func(_ context.Context, v VolumeAttachmentStatus) *VolumeAttachmentStatus {
 		return &v
 	}).(VolumeAttachmentStatusPtrOutput)
-}
-
-func (o VolumeAttachmentStatusOutput) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentStatus] {
-	return pulumix.Output[VolumeAttachmentStatus]{
-		OutputState: o.OutputState,
-	}
 }
 
 // The last error encountered during attach operation, if any. This field must only be set by the entity completing the attach operation, i.e. the external-attacher.
@@ -1094,12 +955,6 @@ func (o VolumeAttachmentStatusPtrOutput) ToVolumeAttachmentStatusPtrOutput() Vol
 
 func (o VolumeAttachmentStatusPtrOutput) ToVolumeAttachmentStatusPtrOutputWithContext(ctx context.Context) VolumeAttachmentStatusPtrOutput {
 	return o
-}
-
-func (o VolumeAttachmentStatusPtrOutput) ToOutput(ctx context.Context) pulumix.Output[*VolumeAttachmentStatus] {
-	return pulumix.Output[*VolumeAttachmentStatus]{
-		OutputState: o.OutputState,
-	}
 }
 
 func (o VolumeAttachmentStatusPtrOutput) Elem() VolumeAttachmentStatusOutput {
@@ -1199,12 +1054,6 @@ func (i VolumeAttachmentStatusPatchArgs) ToVolumeAttachmentStatusPatchOutputWith
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttachmentStatusPatchOutput)
 }
 
-func (i VolumeAttachmentStatusPatchArgs) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentStatusPatch] {
-	return pulumix.Output[VolumeAttachmentStatusPatch]{
-		OutputState: i.ToVolumeAttachmentStatusPatchOutputWithContext(ctx).OutputState,
-	}
-}
-
 func (i VolumeAttachmentStatusPatchArgs) ToVolumeAttachmentStatusPatchPtrOutput() VolumeAttachmentStatusPatchPtrOutput {
 	return i.ToVolumeAttachmentStatusPatchPtrOutputWithContext(context.Background())
 }
@@ -1246,12 +1095,6 @@ func (i *volumeAttachmentStatusPatchPtrType) ToVolumeAttachmentStatusPatchPtrOut
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttachmentStatusPatchPtrOutput)
 }
 
-func (i *volumeAttachmentStatusPatchPtrType) ToOutput(ctx context.Context) pulumix.Output[*VolumeAttachmentStatusPatch] {
-	return pulumix.Output[*VolumeAttachmentStatusPatch]{
-		OutputState: i.ToVolumeAttachmentStatusPatchPtrOutputWithContext(ctx).OutputState,
-	}
-}
-
 // VolumeAttachmentStatus is the status of a VolumeAttachment request.
 type VolumeAttachmentStatusPatchOutput struct{ *pulumi.OutputState }
 
@@ -1275,12 +1118,6 @@ func (o VolumeAttachmentStatusPatchOutput) ToVolumeAttachmentStatusPatchPtrOutpu
 	return o.ApplyTWithContext(ctx, func(_ context.Context, v VolumeAttachmentStatusPatch) *VolumeAttachmentStatusPatch {
 		return &v
 	}).(VolumeAttachmentStatusPatchPtrOutput)
-}
-
-func (o VolumeAttachmentStatusPatchOutput) ToOutput(ctx context.Context) pulumix.Output[VolumeAttachmentStatusPatch] {
-	return pulumix.Output[VolumeAttachmentStatusPatch]{
-		OutputState: o.OutputState,
-	}
 }
 
 // The last error encountered during attach operation, if any. This field must only be set by the entity completing the attach operation, i.e. the external-attacher.
@@ -1315,12 +1152,6 @@ func (o VolumeAttachmentStatusPatchPtrOutput) ToVolumeAttachmentStatusPatchPtrOu
 
 func (o VolumeAttachmentStatusPatchPtrOutput) ToVolumeAttachmentStatusPatchPtrOutputWithContext(ctx context.Context) VolumeAttachmentStatusPatchPtrOutput {
 	return o
-}
-
-func (o VolumeAttachmentStatusPatchPtrOutput) ToOutput(ctx context.Context) pulumix.Output[*VolumeAttachmentStatusPatch] {
-	return pulumix.Output[*VolumeAttachmentStatusPatch]{
-		OutputState: o.OutputState,
-	}
 }
 
 func (o VolumeAttachmentStatusPatchPtrOutput) Elem() VolumeAttachmentStatusPatchOutput {
@@ -1373,6 +1204,327 @@ func (o VolumeAttachmentStatusPatchPtrOutput) DetachError() VolumeErrorPatchPtrO
 	}).(VolumeErrorPatchPtrOutput)
 }
 
+// VolumeAttributesClass represents a specification of mutable volume attributes defined by the CSI driver. The class can be specified during dynamic provisioning of PersistentVolumeClaims, and changed in the PersistentVolumeClaim spec after provisioning.
+type VolumeAttributesClassType struct {
+	// APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+	ApiVersion *string `pulumi:"apiVersion"`
+	// Name of the CSI driver This field is immutable.
+	DriverName string `pulumi:"driverName"`
+	// Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	Kind *string `pulumi:"kind"`
+	// Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	Metadata *metav1.ObjectMeta `pulumi:"metadata"`
+	// parameters hold volume attributes defined by the CSI driver. These values are opaque to the Kubernetes and are passed directly to the CSI driver. The underlying storage provider supports changing these attributes on an existing volume, however the parameters field itself is immutable. To invoke a volume update, a new VolumeAttributesClass should be created with new parameters, and the PersistentVolumeClaim should be updated to reference the new VolumeAttributesClass.
+	//
+	// This field is required and must contain at least one key/value pair. The keys cannot be empty, and the maximum number of parameters is 512, with a cumulative max size of 256K. If the CSI driver rejects invalid parameters, the target PersistentVolumeClaim will be set to an "Infeasible" state in the modifyVolumeStatus field.
+	Parameters map[string]string `pulumi:"parameters"`
+}
+
+// VolumeAttributesClassTypeInput is an input type that accepts VolumeAttributesClassTypeArgs and VolumeAttributesClassTypeOutput values.
+// You can construct a concrete instance of `VolumeAttributesClassTypeInput` via:
+//
+//	VolumeAttributesClassTypeArgs{...}
+type VolumeAttributesClassTypeInput interface {
+	pulumi.Input
+
+	ToVolumeAttributesClassTypeOutput() VolumeAttributesClassTypeOutput
+	ToVolumeAttributesClassTypeOutputWithContext(context.Context) VolumeAttributesClassTypeOutput
+}
+
+// VolumeAttributesClass represents a specification of mutable volume attributes defined by the CSI driver. The class can be specified during dynamic provisioning of PersistentVolumeClaims, and changed in the PersistentVolumeClaim spec after provisioning.
+type VolumeAttributesClassTypeArgs struct {
+	// APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+	ApiVersion pulumi.StringPtrInput `pulumi:"apiVersion"`
+	// Name of the CSI driver This field is immutable.
+	DriverName pulumi.StringInput `pulumi:"driverName"`
+	// Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	Kind pulumi.StringPtrInput `pulumi:"kind"`
+	// Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	Metadata metav1.ObjectMetaPtrInput `pulumi:"metadata"`
+	// parameters hold volume attributes defined by the CSI driver. These values are opaque to the Kubernetes and are passed directly to the CSI driver. The underlying storage provider supports changing these attributes on an existing volume, however the parameters field itself is immutable. To invoke a volume update, a new VolumeAttributesClass should be created with new parameters, and the PersistentVolumeClaim should be updated to reference the new VolumeAttributesClass.
+	//
+	// This field is required and must contain at least one key/value pair. The keys cannot be empty, and the maximum number of parameters is 512, with a cumulative max size of 256K. If the CSI driver rejects invalid parameters, the target PersistentVolumeClaim will be set to an "Infeasible" state in the modifyVolumeStatus field.
+	Parameters pulumi.StringMapInput `pulumi:"parameters"`
+}
+
+func (VolumeAttributesClassTypeArgs) ElementType() reflect.Type {
+	return reflect.TypeOf((*VolumeAttributesClassType)(nil)).Elem()
+}
+
+func (i VolumeAttributesClassTypeArgs) ToVolumeAttributesClassTypeOutput() VolumeAttributesClassTypeOutput {
+	return i.ToVolumeAttributesClassTypeOutputWithContext(context.Background())
+}
+
+func (i VolumeAttributesClassTypeArgs) ToVolumeAttributesClassTypeOutputWithContext(ctx context.Context) VolumeAttributesClassTypeOutput {
+	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttributesClassTypeOutput)
+}
+
+// VolumeAttributesClassTypeArrayInput is an input type that accepts VolumeAttributesClassTypeArray and VolumeAttributesClassTypeArrayOutput values.
+// You can construct a concrete instance of `VolumeAttributesClassTypeArrayInput` via:
+//
+//	VolumeAttributesClassTypeArray{ VolumeAttributesClassTypeArgs{...} }
+type VolumeAttributesClassTypeArrayInput interface {
+	pulumi.Input
+
+	ToVolumeAttributesClassTypeArrayOutput() VolumeAttributesClassTypeArrayOutput
+	ToVolumeAttributesClassTypeArrayOutputWithContext(context.Context) VolumeAttributesClassTypeArrayOutput
+}
+
+type VolumeAttributesClassTypeArray []VolumeAttributesClassTypeInput
+
+func (VolumeAttributesClassTypeArray) ElementType() reflect.Type {
+	return reflect.TypeOf((*[]VolumeAttributesClassType)(nil)).Elem()
+}
+
+func (i VolumeAttributesClassTypeArray) ToVolumeAttributesClassTypeArrayOutput() VolumeAttributesClassTypeArrayOutput {
+	return i.ToVolumeAttributesClassTypeArrayOutputWithContext(context.Background())
+}
+
+func (i VolumeAttributesClassTypeArray) ToVolumeAttributesClassTypeArrayOutputWithContext(ctx context.Context) VolumeAttributesClassTypeArrayOutput {
+	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttributesClassTypeArrayOutput)
+}
+
+// VolumeAttributesClass represents a specification of mutable volume attributes defined by the CSI driver. The class can be specified during dynamic provisioning of PersistentVolumeClaims, and changed in the PersistentVolumeClaim spec after provisioning.
+type VolumeAttributesClassTypeOutput struct{ *pulumi.OutputState }
+
+func (VolumeAttributesClassTypeOutput) ElementType() reflect.Type {
+	return reflect.TypeOf((*VolumeAttributesClassType)(nil)).Elem()
+}
+
+func (o VolumeAttributesClassTypeOutput) ToVolumeAttributesClassTypeOutput() VolumeAttributesClassTypeOutput {
+	return o
+}
+
+func (o VolumeAttributesClassTypeOutput) ToVolumeAttributesClassTypeOutputWithContext(ctx context.Context) VolumeAttributesClassTypeOutput {
+	return o
+}
+
+// APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+func (o VolumeAttributesClassTypeOutput) ApiVersion() pulumi.StringPtrOutput {
+	return o.ApplyT(func(v VolumeAttributesClassType) *string { return v.ApiVersion }).(pulumi.StringPtrOutput)
+}
+
+// Name of the CSI driver This field is immutable.
+func (o VolumeAttributesClassTypeOutput) DriverName() pulumi.StringOutput {
+	return o.ApplyT(func(v VolumeAttributesClassType) string { return v.DriverName }).(pulumi.StringOutput)
+}
+
+// Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+func (o VolumeAttributesClassTypeOutput) Kind() pulumi.StringPtrOutput {
+	return o.ApplyT(func(v VolumeAttributesClassType) *string { return v.Kind }).(pulumi.StringPtrOutput)
+}
+
+// Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+func (o VolumeAttributesClassTypeOutput) Metadata() metav1.ObjectMetaPtrOutput {
+	return o.ApplyT(func(v VolumeAttributesClassType) *metav1.ObjectMeta { return v.Metadata }).(metav1.ObjectMetaPtrOutput)
+}
+
+// parameters hold volume attributes defined by the CSI driver. These values are opaque to the Kubernetes and are passed directly to the CSI driver. The underlying storage provider supports changing these attributes on an existing volume, however the parameters field itself is immutable. To invoke a volume update, a new VolumeAttributesClass should be created with new parameters, and the PersistentVolumeClaim should be updated to reference the new VolumeAttributesClass.
+//
+// This field is required and must contain at least one key/value pair. The keys cannot be empty, and the maximum number of parameters is 512, with a cumulative max size of 256K. If the CSI driver rejects invalid parameters, the target PersistentVolumeClaim will be set to an "Infeasible" state in the modifyVolumeStatus field.
+func (o VolumeAttributesClassTypeOutput) Parameters() pulumi.StringMapOutput {
+	return o.ApplyT(func(v VolumeAttributesClassType) map[string]string { return v.Parameters }).(pulumi.StringMapOutput)
+}
+
+type VolumeAttributesClassTypeArrayOutput struct{ *pulumi.OutputState }
+
+func (VolumeAttributesClassTypeArrayOutput) ElementType() reflect.Type {
+	return reflect.TypeOf((*[]VolumeAttributesClassType)(nil)).Elem()
+}
+
+func (o VolumeAttributesClassTypeArrayOutput) ToVolumeAttributesClassTypeArrayOutput() VolumeAttributesClassTypeArrayOutput {
+	return o
+}
+
+func (o VolumeAttributesClassTypeArrayOutput) ToVolumeAttributesClassTypeArrayOutputWithContext(ctx context.Context) VolumeAttributesClassTypeArrayOutput {
+	return o
+}
+
+func (o VolumeAttributesClassTypeArrayOutput) Index(i pulumi.IntInput) VolumeAttributesClassTypeOutput {
+	return pulumi.All(o, i).ApplyT(func(vs []interface{}) VolumeAttributesClassType {
+		return vs[0].([]VolumeAttributesClassType)[vs[1].(int)]
+	}).(VolumeAttributesClassTypeOutput)
+}
+
+// VolumeAttributesClassList is a collection of VolumeAttributesClass objects.
+type VolumeAttributesClassListType struct {
+	// APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+	ApiVersion *string `pulumi:"apiVersion"`
+	// items is the list of VolumeAttributesClass objects.
+	Items []VolumeAttributesClassType `pulumi:"items"`
+	// Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	Kind *string `pulumi:"kind"`
+	// Standard list metadata More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	Metadata *metav1.ListMeta `pulumi:"metadata"`
+}
+
+// VolumeAttributesClassListTypeInput is an input type that accepts VolumeAttributesClassListTypeArgs and VolumeAttributesClassListTypeOutput values.
+// You can construct a concrete instance of `VolumeAttributesClassListTypeInput` via:
+//
+//	VolumeAttributesClassListTypeArgs{...}
+type VolumeAttributesClassListTypeInput interface {
+	pulumi.Input
+
+	ToVolumeAttributesClassListTypeOutput() VolumeAttributesClassListTypeOutput
+	ToVolumeAttributesClassListTypeOutputWithContext(context.Context) VolumeAttributesClassListTypeOutput
+}
+
+// VolumeAttributesClassList is a collection of VolumeAttributesClass objects.
+type VolumeAttributesClassListTypeArgs struct {
+	// APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+	ApiVersion pulumi.StringPtrInput `pulumi:"apiVersion"`
+	// items is the list of VolumeAttributesClass objects.
+	Items VolumeAttributesClassTypeArrayInput `pulumi:"items"`
+	// Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	Kind pulumi.StringPtrInput `pulumi:"kind"`
+	// Standard list metadata More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	Metadata metav1.ListMetaPtrInput `pulumi:"metadata"`
+}
+
+func (VolumeAttributesClassListTypeArgs) ElementType() reflect.Type {
+	return reflect.TypeOf((*VolumeAttributesClassListType)(nil)).Elem()
+}
+
+func (i VolumeAttributesClassListTypeArgs) ToVolumeAttributesClassListTypeOutput() VolumeAttributesClassListTypeOutput {
+	return i.ToVolumeAttributesClassListTypeOutputWithContext(context.Background())
+}
+
+func (i VolumeAttributesClassListTypeArgs) ToVolumeAttributesClassListTypeOutputWithContext(ctx context.Context) VolumeAttributesClassListTypeOutput {
+	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttributesClassListTypeOutput)
+}
+
+// VolumeAttributesClassList is a collection of VolumeAttributesClass objects.
+type VolumeAttributesClassListTypeOutput struct{ *pulumi.OutputState }
+
+func (VolumeAttributesClassListTypeOutput) ElementType() reflect.Type {
+	return reflect.TypeOf((*VolumeAttributesClassListType)(nil)).Elem()
+}
+
+func (o VolumeAttributesClassListTypeOutput) ToVolumeAttributesClassListTypeOutput() VolumeAttributesClassListTypeOutput {
+	return o
+}
+
+func (o VolumeAttributesClassListTypeOutput) ToVolumeAttributesClassListTypeOutputWithContext(ctx context.Context) VolumeAttributesClassListTypeOutput {
+	return o
+}
+
+// APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+func (o VolumeAttributesClassListTypeOutput) ApiVersion() pulumi.StringPtrOutput {
+	return o.ApplyT(func(v VolumeAttributesClassListType) *string { return v.ApiVersion }).(pulumi.StringPtrOutput)
+}
+
+// items is the list of VolumeAttributesClass objects.
+func (o VolumeAttributesClassListTypeOutput) Items() VolumeAttributesClassTypeArrayOutput {
+	return o.ApplyT(func(v VolumeAttributesClassListType) []VolumeAttributesClassType { return v.Items }).(VolumeAttributesClassTypeArrayOutput)
+}
+
+// Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+func (o VolumeAttributesClassListTypeOutput) Kind() pulumi.StringPtrOutput {
+	return o.ApplyT(func(v VolumeAttributesClassListType) *string { return v.Kind }).(pulumi.StringPtrOutput)
+}
+
+// Standard list metadata More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+func (o VolumeAttributesClassListTypeOutput) Metadata() metav1.ListMetaPtrOutput {
+	return o.ApplyT(func(v VolumeAttributesClassListType) *metav1.ListMeta { return v.Metadata }).(metav1.ListMetaPtrOutput)
+}
+
+// VolumeAttributesClass represents a specification of mutable volume attributes defined by the CSI driver. The class can be specified during dynamic provisioning of PersistentVolumeClaims, and changed in the PersistentVolumeClaim spec after provisioning.
+type VolumeAttributesClassPatchType struct {
+	// APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+	ApiVersion *string `pulumi:"apiVersion"`
+	// Name of the CSI driver This field is immutable.
+	DriverName *string `pulumi:"driverName"`
+	// Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	Kind *string `pulumi:"kind"`
+	// Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	Metadata *metav1.ObjectMetaPatch `pulumi:"metadata"`
+	// parameters hold volume attributes defined by the CSI driver. These values are opaque to the Kubernetes and are passed directly to the CSI driver. The underlying storage provider supports changing these attributes on an existing volume, however the parameters field itself is immutable. To invoke a volume update, a new VolumeAttributesClass should be created with new parameters, and the PersistentVolumeClaim should be updated to reference the new VolumeAttributesClass.
+	//
+	// This field is required and must contain at least one key/value pair. The keys cannot be empty, and the maximum number of parameters is 512, with a cumulative max size of 256K. If the CSI driver rejects invalid parameters, the target PersistentVolumeClaim will be set to an "Infeasible" state in the modifyVolumeStatus field.
+	Parameters map[string]string `pulumi:"parameters"`
+}
+
+// VolumeAttributesClassPatchTypeInput is an input type that accepts VolumeAttributesClassPatchTypeArgs and VolumeAttributesClassPatchTypeOutput values.
+// You can construct a concrete instance of `VolumeAttributesClassPatchTypeInput` via:
+//
+//	VolumeAttributesClassPatchTypeArgs{...}
+type VolumeAttributesClassPatchTypeInput interface {
+	pulumi.Input
+
+	ToVolumeAttributesClassPatchTypeOutput() VolumeAttributesClassPatchTypeOutput
+	ToVolumeAttributesClassPatchTypeOutputWithContext(context.Context) VolumeAttributesClassPatchTypeOutput
+}
+
+// VolumeAttributesClass represents a specification of mutable volume attributes defined by the CSI driver. The class can be specified during dynamic provisioning of PersistentVolumeClaims, and changed in the PersistentVolumeClaim spec after provisioning.
+type VolumeAttributesClassPatchTypeArgs struct {
+	// APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+	ApiVersion pulumi.StringPtrInput `pulumi:"apiVersion"`
+	// Name of the CSI driver This field is immutable.
+	DriverName pulumi.StringPtrInput `pulumi:"driverName"`
+	// Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	Kind pulumi.StringPtrInput `pulumi:"kind"`
+	// Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	Metadata metav1.ObjectMetaPatchPtrInput `pulumi:"metadata"`
+	// parameters hold volume attributes defined by the CSI driver. These values are opaque to the Kubernetes and are passed directly to the CSI driver. The underlying storage provider supports changing these attributes on an existing volume, however the parameters field itself is immutable. To invoke a volume update, a new VolumeAttributesClass should be created with new parameters, and the PersistentVolumeClaim should be updated to reference the new VolumeAttributesClass.
+	//
+	// This field is required and must contain at least one key/value pair. The keys cannot be empty, and the maximum number of parameters is 512, with a cumulative max size of 256K. If the CSI driver rejects invalid parameters, the target PersistentVolumeClaim will be set to an "Infeasible" state in the modifyVolumeStatus field.
+	Parameters pulumi.StringMapInput `pulumi:"parameters"`
+}
+
+func (VolumeAttributesClassPatchTypeArgs) ElementType() reflect.Type {
+	return reflect.TypeOf((*VolumeAttributesClassPatchType)(nil)).Elem()
+}
+
+func (i VolumeAttributesClassPatchTypeArgs) ToVolumeAttributesClassPatchTypeOutput() VolumeAttributesClassPatchTypeOutput {
+	return i.ToVolumeAttributesClassPatchTypeOutputWithContext(context.Background())
+}
+
+func (i VolumeAttributesClassPatchTypeArgs) ToVolumeAttributesClassPatchTypeOutputWithContext(ctx context.Context) VolumeAttributesClassPatchTypeOutput {
+	return pulumi.ToOutputWithContext(ctx, i).(VolumeAttributesClassPatchTypeOutput)
+}
+
+// VolumeAttributesClass represents a specification of mutable volume attributes defined by the CSI driver. The class can be specified during dynamic provisioning of PersistentVolumeClaims, and changed in the PersistentVolumeClaim spec after provisioning.
+type VolumeAttributesClassPatchTypeOutput struct{ *pulumi.OutputState }
+
+func (VolumeAttributesClassPatchTypeOutput) ElementType() reflect.Type {
+	return reflect.TypeOf((*VolumeAttributesClassPatchType)(nil)).Elem()
+}
+
+func (o VolumeAttributesClassPatchTypeOutput) ToVolumeAttributesClassPatchTypeOutput() VolumeAttributesClassPatchTypeOutput {
+	return o
+}
+
+func (o VolumeAttributesClassPatchTypeOutput) ToVolumeAttributesClassPatchTypeOutputWithContext(ctx context.Context) VolumeAttributesClassPatchTypeOutput {
+	return o
+}
+
+// APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+func (o VolumeAttributesClassPatchTypeOutput) ApiVersion() pulumi.StringPtrOutput {
+	return o.ApplyT(func(v VolumeAttributesClassPatchType) *string { return v.ApiVersion }).(pulumi.StringPtrOutput)
+}
+
+// Name of the CSI driver This field is immutable.
+func (o VolumeAttributesClassPatchTypeOutput) DriverName() pulumi.StringPtrOutput {
+	return o.ApplyT(func(v VolumeAttributesClassPatchType) *string { return v.DriverName }).(pulumi.StringPtrOutput)
+}
+
+// Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+func (o VolumeAttributesClassPatchTypeOutput) Kind() pulumi.StringPtrOutput {
+	return o.ApplyT(func(v VolumeAttributesClassPatchType) *string { return v.Kind }).(pulumi.StringPtrOutput)
+}
+
+// Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+func (o VolumeAttributesClassPatchTypeOutput) Metadata() metav1.ObjectMetaPatchPtrOutput {
+	return o.ApplyT(func(v VolumeAttributesClassPatchType) *metav1.ObjectMetaPatch { return v.Metadata }).(metav1.ObjectMetaPatchPtrOutput)
+}
+
+// parameters hold volume attributes defined by the CSI driver. These values are opaque to the Kubernetes and are passed directly to the CSI driver. The underlying storage provider supports changing these attributes on an existing volume, however the parameters field itself is immutable. To invoke a volume update, a new VolumeAttributesClass should be created with new parameters, and the PersistentVolumeClaim should be updated to reference the new VolumeAttributesClass.
+//
+// This field is required and must contain at least one key/value pair. The keys cannot be empty, and the maximum number of parameters is 512, with a cumulative max size of 256K. If the CSI driver rejects invalid parameters, the target PersistentVolumeClaim will be set to an "Infeasible" state in the modifyVolumeStatus field.
+func (o VolumeAttributesClassPatchTypeOutput) Parameters() pulumi.StringMapOutput {
+	return o.ApplyT(func(v VolumeAttributesClassPatchType) map[string]string { return v.Parameters }).(pulumi.StringMapOutput)
+}
+
 // VolumeError captures an error encountered during a volume operation.
 type VolumeError struct {
 	// String detailing the error encountered during Attach or Detach operation. This string maybe logged, so it should not contain sensitive information.
@@ -1410,12 +1562,6 @@ func (i VolumeErrorArgs) ToVolumeErrorOutput() VolumeErrorOutput {
 
 func (i VolumeErrorArgs) ToVolumeErrorOutputWithContext(ctx context.Context) VolumeErrorOutput {
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeErrorOutput)
-}
-
-func (i VolumeErrorArgs) ToOutput(ctx context.Context) pulumix.Output[VolumeError] {
-	return pulumix.Output[VolumeError]{
-		OutputState: i.ToVolumeErrorOutputWithContext(ctx).OutputState,
-	}
 }
 
 func (i VolumeErrorArgs) ToVolumeErrorPtrOutput() VolumeErrorPtrOutput {
@@ -1459,12 +1605,6 @@ func (i *volumeErrorPtrType) ToVolumeErrorPtrOutputWithContext(ctx context.Conte
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeErrorPtrOutput)
 }
 
-func (i *volumeErrorPtrType) ToOutput(ctx context.Context) pulumix.Output[*VolumeError] {
-	return pulumix.Output[*VolumeError]{
-		OutputState: i.ToVolumeErrorPtrOutputWithContext(ctx).OutputState,
-	}
-}
-
 // VolumeError captures an error encountered during a volume operation.
 type VolumeErrorOutput struct{ *pulumi.OutputState }
 
@@ -1490,12 +1630,6 @@ func (o VolumeErrorOutput) ToVolumeErrorPtrOutputWithContext(ctx context.Context
 	}).(VolumeErrorPtrOutput)
 }
 
-func (o VolumeErrorOutput) ToOutput(ctx context.Context) pulumix.Output[VolumeError] {
-	return pulumix.Output[VolumeError]{
-		OutputState: o.OutputState,
-	}
-}
-
 // String detailing the error encountered during Attach or Detach operation. This string maybe logged, so it should not contain sensitive information.
 func (o VolumeErrorOutput) Message() pulumi.StringPtrOutput {
 	return o.ApplyT(func(v VolumeError) *string { return v.Message }).(pulumi.StringPtrOutput)
@@ -1518,12 +1652,6 @@ func (o VolumeErrorPtrOutput) ToVolumeErrorPtrOutput() VolumeErrorPtrOutput {
 
 func (o VolumeErrorPtrOutput) ToVolumeErrorPtrOutputWithContext(ctx context.Context) VolumeErrorPtrOutput {
 	return o
-}
-
-func (o VolumeErrorPtrOutput) ToOutput(ctx context.Context) pulumix.Output[*VolumeError] {
-	return pulumix.Output[*VolumeError]{
-		OutputState: o.OutputState,
-	}
 }
 
 func (o VolumeErrorPtrOutput) Elem() VolumeErrorOutput {
@@ -1595,12 +1723,6 @@ func (i VolumeErrorPatchArgs) ToVolumeErrorPatchOutputWithContext(ctx context.Co
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeErrorPatchOutput)
 }
 
-func (i VolumeErrorPatchArgs) ToOutput(ctx context.Context) pulumix.Output[VolumeErrorPatch] {
-	return pulumix.Output[VolumeErrorPatch]{
-		OutputState: i.ToVolumeErrorPatchOutputWithContext(ctx).OutputState,
-	}
-}
-
 func (i VolumeErrorPatchArgs) ToVolumeErrorPatchPtrOutput() VolumeErrorPatchPtrOutput {
 	return i.ToVolumeErrorPatchPtrOutputWithContext(context.Background())
 }
@@ -1642,12 +1764,6 @@ func (i *volumeErrorPatchPtrType) ToVolumeErrorPatchPtrOutputWithContext(ctx con
 	return pulumi.ToOutputWithContext(ctx, i).(VolumeErrorPatchPtrOutput)
 }
 
-func (i *volumeErrorPatchPtrType) ToOutput(ctx context.Context) pulumix.Output[*VolumeErrorPatch] {
-	return pulumix.Output[*VolumeErrorPatch]{
-		OutputState: i.ToVolumeErrorPatchPtrOutputWithContext(ctx).OutputState,
-	}
-}
-
 // VolumeError captures an error encountered during a volume operation.
 type VolumeErrorPatchOutput struct{ *pulumi.OutputState }
 
@@ -1673,12 +1789,6 @@ func (o VolumeErrorPatchOutput) ToVolumeErrorPatchPtrOutputWithContext(ctx conte
 	}).(VolumeErrorPatchPtrOutput)
 }
 
-func (o VolumeErrorPatchOutput) ToOutput(ctx context.Context) pulumix.Output[VolumeErrorPatch] {
-	return pulumix.Output[VolumeErrorPatch]{
-		OutputState: o.OutputState,
-	}
-}
-
 // String detailing the error encountered during Attach or Detach operation. This string maybe logged, so it should not contain sensitive information.
 func (o VolumeErrorPatchOutput) Message() pulumi.StringPtrOutput {
 	return o.ApplyT(func(v VolumeErrorPatch) *string { return v.Message }).(pulumi.StringPtrOutput)
@@ -1701,12 +1811,6 @@ func (o VolumeErrorPatchPtrOutput) ToVolumeErrorPatchPtrOutput() VolumeErrorPatc
 
 func (o VolumeErrorPatchPtrOutput) ToVolumeErrorPatchPtrOutputWithContext(ctx context.Context) VolumeErrorPatchPtrOutput {
 	return o
-}
-
-func (o VolumeErrorPatchPtrOutput) ToOutput(ctx context.Context) pulumix.Output[*VolumeErrorPatch] {
-	return pulumix.Output[*VolumeErrorPatch]{
-		OutputState: o.OutputState,
-	}
 }
 
 func (o VolumeErrorPatchPtrOutput) Elem() VolumeErrorPatchOutput {
@@ -1754,6 +1858,10 @@ func init() {
 	pulumi.RegisterInputType(reflect.TypeOf((*VolumeAttachmentStatusPtrInput)(nil)).Elem(), VolumeAttachmentStatusArgs{})
 	pulumi.RegisterInputType(reflect.TypeOf((*VolumeAttachmentStatusPatchInput)(nil)).Elem(), VolumeAttachmentStatusPatchArgs{})
 	pulumi.RegisterInputType(reflect.TypeOf((*VolumeAttachmentStatusPatchPtrInput)(nil)).Elem(), VolumeAttachmentStatusPatchArgs{})
+	pulumi.RegisterInputType(reflect.TypeOf((*VolumeAttributesClassTypeInput)(nil)).Elem(), VolumeAttributesClassTypeArgs{})
+	pulumi.RegisterInputType(reflect.TypeOf((*VolumeAttributesClassTypeArrayInput)(nil)).Elem(), VolumeAttributesClassTypeArray{})
+	pulumi.RegisterInputType(reflect.TypeOf((*VolumeAttributesClassListTypeInput)(nil)).Elem(), VolumeAttributesClassListTypeArgs{})
+	pulumi.RegisterInputType(reflect.TypeOf((*VolumeAttributesClassPatchTypeInput)(nil)).Elem(), VolumeAttributesClassPatchTypeArgs{})
 	pulumi.RegisterInputType(reflect.TypeOf((*VolumeErrorInput)(nil)).Elem(), VolumeErrorArgs{})
 	pulumi.RegisterInputType(reflect.TypeOf((*VolumeErrorPtrInput)(nil)).Elem(), VolumeErrorArgs{})
 	pulumi.RegisterInputType(reflect.TypeOf((*VolumeErrorPatchInput)(nil)).Elem(), VolumeErrorPatchArgs{})
@@ -1772,6 +1880,10 @@ func init() {
 	pulumi.RegisterOutputType(VolumeAttachmentStatusPtrOutput{})
 	pulumi.RegisterOutputType(VolumeAttachmentStatusPatchOutput{})
 	pulumi.RegisterOutputType(VolumeAttachmentStatusPatchPtrOutput{})
+	pulumi.RegisterOutputType(VolumeAttributesClassTypeOutput{})
+	pulumi.RegisterOutputType(VolumeAttributesClassTypeArrayOutput{})
+	pulumi.RegisterOutputType(VolumeAttributesClassListTypeOutput{})
+	pulumi.RegisterOutputType(VolumeAttributesClassPatchTypeOutput{})
 	pulumi.RegisterOutputType(VolumeErrorOutput{})
 	pulumi.RegisterOutputType(VolumeErrorPtrOutput{})
 	pulumi.RegisterOutputType(VolumeErrorPatchOutput{})

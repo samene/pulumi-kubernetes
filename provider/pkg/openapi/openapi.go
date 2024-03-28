@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/kinds"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	logger "github.com/pulumi/pulumi/sdk/v3/go/common/util/logging"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -46,10 +47,19 @@ import (
 
 // --------------------------------------------------------------------------
 
+// openAPIResourcesGetter is a simple implementation of k8sopenapi.OpenAPIResourcesGetter that returns a fixed set of
+// resources. Our current use case already has the resources available, so we just need to wrap them in this struct to
+// satisfy the interface.
+type openAPIResourcesGetter struct {
+	resources openapi.Resources
+}
+
+func (o *openAPIResourcesGetter) OpenAPISchema() (openapi.Resources, error) {
+	return o.resources, nil
+}
+
 // ValidateAgainstSchema validates a document against the given schema.
-func ValidateAgainstSchema(
-	resources openapi.Resources, obj *unstructured.Unstructured,
-) error {
+func ValidateAgainstSchema(resources openapi.Resources, obj *unstructured.Unstructured) error {
 	bytes, err := obj.MarshalJSON()
 	if err != nil {
 		return err
@@ -66,7 +76,7 @@ func ValidateAgainstSchema(
 	// validation errors when there are multiple errors for usability purposes.
 
 	// Validate resource against schema.
-	specValidator := validation.NewSchemaValidation(resources)
+	specValidator := validation.NewSchemaValidation(&openAPIResourcesGetter{resources})
 	return specValidator.ValidateBytes(bytes)
 }
 
@@ -76,6 +86,9 @@ func ValidateAgainstSchema(
 func PatchForResourceUpdate(
 	resources openapi.Resources, lastSubmitted, currentSubmitted, liveOldObj *unstructured.Unstructured,
 ) (patch []byte, patchType types.PatchType, lookupPatchMeta strategicpatch.LookupPatchMeta, err error) {
+
+	contract.Assertf(liveOldObj.GetAPIVersion() == currentSubmitted.GetAPIVersion(), "unexpected APIVersion %q to be %q", liveOldObj.GetAPIVersion(), currentSubmitted.GetAPIVersion())
+
 	// Create JSON blobs for each of these, preparing to create the three-way merge patch.
 	lastSubmittedJSON, err := lastSubmitted.MarshalJSON()
 	if err != nil {
@@ -93,22 +106,22 @@ func PatchForResourceUpdate(
 	}
 
 	// CRD GroupVersions are not included in the known set.
-	if knownGV := kinds.KnownGroupVersions.Has(lastSubmitted.GetAPIVersion()); !knownGV {
+	if knownGV := kinds.KnownGroupVersions.Has(liveOldObj.GetAPIVersion()); !knownGV {
 		// Use a JSON merge patch for CRD Kinds.
 		patch, patchType, err = MergePatch(
-			lastSubmitted, lastSubmittedJSON, currentSubmittedJSON, liveOldJSON,
+			liveOldObj, lastSubmittedJSON, currentSubmittedJSON, liveOldJSON,
 		)
 		return patch, patchType, lookupPatchMeta, err
 	}
 
 	// Attempt a three-way strategic merge.
 	patch, patchType, lookupPatchMeta, err = StrategicMergePatch(
-		resources, lastSubmitted, lastSubmittedJSON, currentSubmittedJSON, liveOldJSON,
+		resources, liveOldObj, lastSubmittedJSON, currentSubmittedJSON, liveOldJSON,
 	)
 	// Else, fall back to a three-way JSON merge patch.
 	if err != nil {
 		patch, patchType, err = MergePatch(
-			lastSubmitted, lastSubmittedJSON, currentSubmittedJSON, liveOldJSON,
+			liveOldObj, lastSubmittedJSON, currentSubmittedJSON, liveOldJSON,
 		)
 	}
 	return patch, patchType, lookupPatchMeta, err
@@ -117,12 +130,12 @@ func PatchForResourceUpdate(
 // StrategicMergePatch is a helper to use a three-way strategic merge on a resource version.
 // See for more details: https://tools.ietf.org/html/rfc6902
 func StrategicMergePatch(
-	resources openapi.Resources, lastSubmitted *unstructured.Unstructured, lastSubmittedJSON, currentSubmittedJSON, liveOldJSON []byte,
+	resources openapi.Resources, liveOld *unstructured.Unstructured, lastSubmittedJSON, currentSubmittedJSON, liveOldJSON []byte,
 ) (patch []byte, patchType types.PatchType, lookupPatchMeta strategicpatch.LookupPatchMeta, err error) {
-	gvk := lastSubmitted.GroupVersionKind()
+	gvk := liveOld.GroupVersionKind()
 	if resSchema := resources.LookupResource(gvk); resSchema != nil {
 		logger.V(1).Infof("Attempting to update '%s' '%s/%s' with strategic merge",
-			gvk.String(), lastSubmitted.GetNamespace(), lastSubmitted.GetName())
+			gvk.String(), liveOld.GetNamespace(), liveOld.GetName())
 		patch, patchType, lookupPatchMeta, err = strategicMergePatch(
 			gvk, resSchema, lastSubmittedJSON, currentSubmittedJSON, liveOldJSON)
 	}
@@ -135,12 +148,12 @@ func StrategicMergePatch(
 // MergePatch is a helper to use a three-way JSON merge patch on a resource version.
 // See for more details: https://tools.ietf.org/html/rfc7386
 func MergePatch(
-	lastSubmitted *unstructured.Unstructured, lastSubmittedJSON, currentSubmittedJSON, liveOldJSON []byte,
+	liveOld *unstructured.Unstructured, lastSubmittedJSON, currentSubmittedJSON, liveOldJSON []byte,
 ) (patch []byte, patchType types.PatchType, err error) {
-	gvk := lastSubmitted.GroupVersionKind()
+	gvk := liveOld.GroupVersionKind()
 	// Fall back to three-way JSON merge patch.
 	logger.V(1).Infof("Attempting to update '%s' '%s/%s' with JSON merge",
-		gvk.String(), lastSubmitted.GetNamespace(), lastSubmitted.GetName())
+		gvk.String(), liveOld.GetNamespace(), liveOld.GetName())
 	patch, patchType, err = jsonMergePatch(lastSubmittedJSON, currentSubmittedJSON, liveOldJSON)
 	return patch, patchType, err
 }

@@ -8,7 +8,6 @@ import (
 	"reflect"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumix"
 )
 
 type ServiceSpecType string
@@ -80,12 +79,6 @@ func (o ServiceSpecTypeOutput) ToServiceSpecTypePtrOutputWithContext(ctx context
 	}).(ServiceSpecTypePtrOutput)
 }
 
-func (o ServiceSpecTypeOutput) ToOutput(ctx context.Context) pulumix.Output[ServiceSpecType] {
-	return pulumix.Output[ServiceSpecType]{
-		OutputState: o.OutputState,
-	}
-}
-
 func (o ServiceSpecTypeOutput) ToStringOutput() pulumi.StringOutput {
 	return o.ToStringOutputWithContext(context.Background())
 }
@@ -121,12 +114,6 @@ func (o ServiceSpecTypePtrOutput) ToServiceSpecTypePtrOutputWithContext(ctx cont
 	return o
 }
 
-func (o ServiceSpecTypePtrOutput) ToOutput(ctx context.Context) pulumix.Output[*ServiceSpecType] {
-	return pulumix.Output[*ServiceSpecType]{
-		OutputState: o.OutputState,
-	}
-}
-
 func (o ServiceSpecTypePtrOutput) Elem() ServiceSpecTypeOutput {
 	return o.ApplyT(func(v *ServiceSpecType) ServiceSpecType {
 		if v != nil {
@@ -151,10 +138,13 @@ func (o ServiceSpecTypePtrOutput) ToStringPtrOutputWithContext(ctx context.Conte
 	}).(pulumi.StringPtrOutput)
 }
 
-// ServiceSpecTypeInput is an input type that accepts ServiceSpecTypeArgs and ServiceSpecTypeOutput values.
-// You can construct a concrete instance of `ServiceSpecTypeInput` via:
+// ServiceSpecTypeInput is an input type that accepts values of the ServiceSpecType enum
+// A concrete instance of `ServiceSpecTypeInput` can be one of the following:
 //
-//	ServiceSpecTypeArgs{...}
+//	ServiceSpecTypeExternalName
+//	ServiceSpecTypeClusterIP
+//	ServiceSpecTypeNodePort
+//	ServiceSpecTypeLoadBalancer
 type ServiceSpecTypeInput interface {
 	pulumi.Input
 
@@ -187,12 +177,6 @@ func (in *serviceSpecTypePtr) ToServiceSpecTypePtrOutput() ServiceSpecTypePtrOut
 
 func (in *serviceSpecTypePtr) ToServiceSpecTypePtrOutputWithContext(ctx context.Context) ServiceSpecTypePtrOutput {
 	return pulumi.ToOutputWithContext(ctx, in).(ServiceSpecTypePtrOutput)
-}
-
-func (in *serviceSpecTypePtr) ToOutput(ctx context.Context) pulumix.Output[*ServiceSpecType] {
-	return pulumix.Output[*ServiceSpecType]{
-		OutputState: in.ToServiceSpecTypePtrOutputWithContext(ctx).OutputState,
-	}
 }
 
 func init() {

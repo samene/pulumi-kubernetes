@@ -1,10 +1,110 @@
 ## Unreleased
+
+- ConfigGroup V2 (https://github.com/pulumi/pulumi-kubernetes/pull/2844)
+- ConfigFile V2 (https://github.com/pulumi/pulumi-kubernetes/pull/2862)
+- Bugfix for ambiguous kinds (https://github.com/pulumi/pulumi-kubernetes/pull/2889)
+- [yaml/v2] Support for resource ordering (https://github.com/pulumi/pulumi-kubernetes/pull/2894)
+
+### New Features
+
+A new MLC-based implementation of `ConfigGroup` is now available in the "yaml/v2" package. This resource is
+usable in all Pulumi languages, including Pulumi YAML and in the Java Pulumi SDK.
+
+Note that transformations aren't supported in this release (see https://github.com/pulumi/pulumi/issues/12996).
+
+## 4.9.1 (March 13, 2024)
+
+- Use async invokes to avoid hangs/stalls in Python `helm`, `kustomize`, and `yaml` components (https://github.com/pulumi/pulumi-kubernetes/pull/2863)
+
+## 4.9.0 (March 4, 2024)
+
+- Fix SSA ignoreChanges by enhancing field manager path comparisons (https://github.com/pulumi/pulumi-kubernetes/pull/2828)
+- Update nodejs SDK dependencies (https://github.com/pulumi/pulumi-kubernetes/pull/2858, https://github.com/pulumi/pulumi-kubernetes/pull/2861)
+
+## 4.8.1 (February 22, 2024)
+
+- skip normalization in preview w/ computed fields (https://github.com/pulumi/pulumi-kubernetes/pull/2846)
+
+## 4.8.0 (February 22, 2024)
+
+- Fix DiffConfig issue when when provider's kubeconfig is set to file path (https://github.com/pulumi/pulumi-kubernetes/pull/2771)
+- Fix for replacement having incorrect status messages (https://github.com/pulumi/pulumi-kubernetes/pull/2810)
+- Use output properties for await logic (https://github.com/pulumi/pulumi-kubernetes/pull/2790)
+- Support for metadata.generateName (CSA) (https://github.com/pulumi/pulumi-kubernetes/pull/2808)
+- Fix unmarshalling of Helm values yaml file (https://github.com/pulumi/pulumi-kubernetes/issues/2815)
+- Handle unknowns in Helm Release resource (https://github.com/pulumi/pulumi-kubernetes/pull/2822)
+
+## 4.7.1 (January 17, 2024)
+
+- Fix deployment await logic for accurate rollout detection
+
+## 4.7.0 (January 17, 2024)
+- Fix JSON encoding of KubeVersion and Version on Chart resource (.NET SDK) (https://github.com/pulumi/pulumi-kubernetes/pull/2740)
+- Fix option propagation in component resources (Python SDK) (https://github.com/pulumi/pulumi-kubernetes/pull/2717)
+- Fix option propagation in component resources (.NET SDK) (https://github.com/pulumi/pulumi-kubernetes/pull/2720)
+- Fix option propagation in component resources (NodeJS SDK) (https://github.com/pulumi/pulumi-kubernetes/pull/2713)
+- Fix option propagation in component resources (Go SDK) (https://github.com/pulumi/pulumi-kubernetes/pull/2709)
+
+### Breaking Changes
+In previous versions of the pulumi-kubernetes .NET SDK, the `ConfigFile` and `ConfigGroup` component resources inadvertently assigned the wrong parent to the child resource(s). 
+This would happen when the component resource itself had a parent; the child would be assigned that same parent. This also had the effect of disregarding the component resource's provider in favor of the parent's provider.
+
+For example, here's a before/after look at the component hierarchy:
+
+Before:
+
+```
+├─ pkg:index:MyComponent            parent                                               
+│  ├─ kubernetes:core/v1:ConfigMap  cg-options-cg-options-cm-1                           
+│  ├─ kubernetes:yaml:ConfigFile    cg-options-testdata/options/configgroup/manifest.yaml
+│  ├─ kubernetes:core/v1:ConfigMap  cg-options-configgroup-cm-1                          
+│  ├─ kubernetes:yaml:ConfigFile    cg-options-testdata/options/configgroup/empty.yaml   
+│  └─ kubernetes:yaml:ConfigGroup   cg-options  
+```
+
+After:
+
+```
+└─ pkg:index:MyComponent                  parent                                               
+   └─ kubernetes:yaml:ConfigGroup         cg-options                                           
+      ├─ kubernetes:yaml:ConfigFile       cg-options-testdata/options/configgroup/manifest.yaml
+      │  └─ kubernetes:core/v1:ConfigMap  cg-options-configgroup-cm-1                          
+      └─ kubernetes:core/v1:ConfigMap     cg-options-cg-options-cm-1     
+```
+      
+This release addresses this issue and attempts to heal existing stacks using aliases. This is effective at avoiding a replacement except in the case where the child was created with the wrong provider. In this case, __Pulumi will suggest a replacement of the child resource(s), such that they use the correct provider__.
+
+## 4.6.1 (December 14, 2023)
+- Fix: Refine URN lookup by using its core type for more accurate resource identification (https://github.com/pulumi/pulumi-kubernetes/issues/2719)
+
+## 4.6.0 (December 13, 2023)
 - Fix: Helm OCI chart deployment fails in Windows (https://github.com/pulumi/pulumi-kubernetes/pull/2648)
-
 - Fix: compute version field in Check for content detection (https://github.com/pulumi/pulumi-kubernetes/pull/2672)
-
 - Fix: Fix: Helm Release fails with "the server could not find the requested resource" (https://github.com/pulumi/pulumi-kubernetes/pull/2677)
+- Fix Helm Chart resource lookup key handling for objects in default namespace (https://github.com/pulumi/pulumi-kubernetes/pull/2655)
+- Update Kubernetes schemas and libraries to v1.29.0 (https://github.com/pulumi/pulumi-kubernetes/pull/2690)
+- Fix panic when using `PULUMI_KUBERNETES_MANAGED_BY_LABEL` env var with SSA created objects (https://github.com/pulumi/pulumi-kubernetes/pull/2711)
+- Fix normalization of base64 encoded secrets.data values to strip whitespace (https://github.com/pulumi/pulumi-kubernetes/issues/2715)
 
+### Resources Renamed:
+- `#/types/kubernetes:core/v1:ResourceRequirements`
+  - renamed to: `#/types/kubernetes:core/v1:VolumeResourceRequirements`
+- `#/types/kubernetes:core/v1:ResourceRequirementsPatch`
+  - renamed to: `#/types/kubernetes:core/v1:VolumeResourceRequirementsPatch`
+
+### New Resources:
+- `flowcontrol.apiserver.k8s.io/v1.FlowSchema`
+- `flowcontrol.apiserver.k8s.io/v1.FlowSchemaList`
+- `flowcontrol.apiserver.k8s.io/v1.FlowSchemaPatch`
+- `flowcontrol.apiserver.k8s.io/v1.PriorityLevelConfiguration`
+- `flowcontrol.apiserver.k8s.io/v1.PriorityLevelConfigurationList`
+- `flowcontrol.apiserver.k8s.io/v1.PriorityLevelConfigurationPatch`
+- `networking.k8s.io/v1alpha1.ServiceCIDR`
+- `networking.k8s.io/v1alpha1.ServiceCIDRList`
+- `networking.k8s.io/v1alpha1.ServiceCIDRPatch`
+- `storage.k8s.io/v1alpha1.VolumeAttributesClass`
+- `storage.k8s.io/v1alpha1.VolumeAttributesClassList`
+- `storage.k8s.io/v1alpha1.VolumeAttributesClassPatch`
 
 ## 4.5.5 (November 28, 2023)
 - Fix: Make the invoke calls for Helm charts and YAML config resilient to the value being None or an empty dict (https://github.com/pulumi/pulumi-kubernetes/pull/2665)

@@ -43,7 +43,7 @@ func TestAccMinimal(t *testing.T) {
 }
 
 func TestAccGuestbook(t *testing.T) {
-	tests.SkipIfShort(t)
+	tests.SkipIfShort(t, "test provisions a load balancer and requires a cloud provider cluster to run")
 	test := getBaseOptions(t).
 		With(integration.ProgramTestOptions{
 			Dir:                  filepath.Join(getCwd(t), "guestbook"),
@@ -134,7 +134,7 @@ func TestAccGuestbook(t *testing.T) {
 }
 
 func TestAccIngress(t *testing.T) {
-	tests.SkipIfShort(t)
+	tests.SkipIfShort(t, "test provisions a load balancer and requires a cloud provider cluster to run")
 	testNetworkingV1 := getBaseOptions(t).
 		With(integration.ProgramTestOptions{
 			Dir:           filepath.Join(getCwd(t), "ingress"),
@@ -164,7 +164,7 @@ func TestAccIngress(t *testing.T) {
 }
 
 func TestAccHelm(t *testing.T) {
-	tests.SkipIfShort(t)
+	tests.SkipIfShort(t, "test provisions a load balancer and requires a cloud provider cluster to run")
 	test := getBaseOptions(t).
 		With(integration.ProgramTestOptions{
 			Dir:         filepath.Join(getCwd(t), "helm", "step1"),
@@ -190,7 +190,6 @@ func TestAccHelm(t *testing.T) {
 }
 
 func TestHelmNoDefaultProvider(t *testing.T) {
-	tests.SkipIfShort(t)
 	test := getBaseOptions(t).
 		With(integration.ProgramTestOptions{
 			Dir:         filepath.Join(getCwd(t), "helm-no-default-provider"),
@@ -204,7 +203,6 @@ func TestHelmNoDefaultProvider(t *testing.T) {
 }
 
 func TestAccHelmApiVersions(t *testing.T) {
-	tests.SkipIfShort(t)
 	test := getBaseOptions(t).
 		With(integration.ProgramTestOptions{
 			Dir:         filepath.Join(getCwd(t), "helm-api-versions", "step1"),
@@ -221,7 +219,6 @@ func TestAccHelmApiVersions(t *testing.T) {
 }
 
 func TestAccHelmKubeVersion(t *testing.T) {
-	tests.SkipIfShort(t)
 	test := getBaseOptions(t).
 		With(integration.ProgramTestOptions{
 			Dir:         filepath.Join(getCwd(t), "helm-kube-version", "step1"),
@@ -263,7 +260,7 @@ func TestAccHelmAllowCRDRendering(t *testing.T) {
 }
 
 func TestAccHelmLocal(t *testing.T) {
-	tests.SkipIfShort(t)
+	tests.SkipIfShort(t, "test provisions a load balancer and requires a cloud provider cluster to run")
 	test := getBaseOptions(t).
 		With(integration.ProgramTestOptions{
 			Dir:                  filepath.Join(getCwd(t), "helm-local", "step1"),
@@ -306,8 +303,8 @@ func TestAccHelmLocal(t *testing.T) {
 	integration.ProgramTest(t, &test)
 }
 
-func testAccPrometheusOperator(t *testing.T) {
-	tests.SkipIfShort(t)
+func TestAccPrometheusOperator(t *testing.T) {
+	tests.SkipIfShort(t, "test provisions a load balancer and requires a cloud provider cluster to run")
 	test := getBaseOptions(t).
 		With(integration.ProgramTestOptions{
 			Dir:         filepath.Join(getCwd(t), "prometheus-operator"),
@@ -354,7 +351,6 @@ func testAccPrometheusOperator(t *testing.T) {
 //}
 
 func TestAccProvider(t *testing.T) {
-	tests.SkipIfShort(t)
 	test := getBaseOptions(t).
 		With(integration.ProgramTestOptions{
 			Dir: filepath.Join(getCwd(t), "provider"),
@@ -364,7 +360,7 @@ func TestAccProvider(t *testing.T) {
 }
 
 func TestHelmRelease(t *testing.T) {
-	tests.SkipIfShort(t)
+	tests.SkipIfShort(t, "test provisions a load balancer and requires a cloud provider cluster to run")
 	validationFunc := func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
 		assert.NotEmpty(t, stackInfo.Outputs["redisMasterClusterIP"].(string))
 		assert.Equal(t, stackInfo.Outputs["status"], "deployed")
@@ -427,7 +423,6 @@ func TestHelmRelease(t *testing.T) {
 func TestHelmReleaseCRD(t *testing.T) {
 	// Validate that Helm charts with CRDs work across create/update/refresh/delete cycles.
 	// https://github.com/pulumi/pulumi-kubernetes/issues/1712
-	tests.SkipIfShort(t)
 	test := getBaseOptions(t).
 		With(integration.ProgramTestOptions{
 			Dir:                  filepath.Join(getCwd(t), "helm-release-crd", "step1"),
@@ -447,7 +442,7 @@ func TestHelmReleaseCRD(t *testing.T) {
 
 func TestHelmReleaseNamespace(t *testing.T) {
 	// Validate fix for https://github.com/pulumi/pulumi-kubernetes/issues/1710
-	tests.SkipIfShort(t)
+	tests.SkipIfShort(t, "test provisions a load balancer and requires a cloud provider cluster to run")
 	test := getBaseOptions(t).
 		With(integration.ProgramTestOptions{
 			Dir:                  filepath.Join(getCwd(t), "helm-release-namespace", "step1"),
@@ -517,7 +512,7 @@ func TestHelmReleaseRedis(t *testing.T) {
 	}
 
 	// Validate fix for https://github.com/pulumi/pulumi-kubernetes/issues/1933
-	tests.SkipIfShort(t)
+	tests.SkipIfShort(t, "test provisions a load balancer and requires a cloud provider cluster to run")
 	test := getBaseOptions(t).
 		With(integration.ProgramTestOptions{
 			Dir:                  filepath.Join(getCwd(t), "helm-release-redis", "step1"),
@@ -540,12 +535,14 @@ func TestHelmReleaseRedis(t *testing.T) {
 	integration.ProgramTest(t, &test)
 }
 
-func testRancher(t *testing.T) {
-	// Validate fix for https://github.com/pulumi/pulumi-kubernetes/issues/1848
-	tests.SkipIfShort(t)
+// TestHelmTemplatePanic validates the fix for https://github.com/pulumi/pulumi-kubernetes/issues/1848.
+// The issue was caused by a panic when a Helm chart has conditional formatting to include/exclude a resource
+// gvk based on capabilities. The panic was caused by the Helm provider not correctly handling the case where
+// the resource was templated, but not included in the final manifest applied to the cluster.
+func TestHelmTemplatePanic(t *testing.T) {
 	test := getBaseOptions(t).
 		With(integration.ProgramTestOptions{
-			Dir:         filepath.Join(getCwd(t), "rancher", "step1"),
+			Dir:         filepath.Join(getCwd(t), "helm-local-panic", "step1"),
 			SkipRefresh: true,
 			Verbose:     true,
 			NoParallel:  true,
@@ -557,20 +554,12 @@ func testRancher(t *testing.T) {
 			},
 			EditDirs: []integration.EditDir{
 				{
-					Dir:      filepath.Join(getCwd(t), "rancher", "step2"),
+					Dir:      filepath.Join(getCwd(t), "helm-local-panic", "step2"),
 					Additive: true,
 				},
 			},
 		})
 	integration.ProgramTest(t, &test)
-}
-
-// TestCRDs runs 2 sub tests that cannot be parallelized as they touch
-// the same cluster-scoped CRD. This is required until we can run tests
-// in parallel with different clusters (tracked by: https://github.com/pulumi/pulumi-kubernetes/issues/2243).
-func TestCRDs(t *testing.T) {
-	t.Run("testAccPrometheusOperator", testAccPrometheusOperator)
-	t.Run("testRancher", testRancher)
 }
 
 func getCwd(t *testing.T) string {

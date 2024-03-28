@@ -361,8 +361,10 @@ namespace Pulumi.Kubernetes.Helm.V3
             }
             jsonOptsString = JsonSerializer.Serialize(jsonOpts, serializeOptions);
 
+            var childOpts = GetChildOptions(this, dependsOn.ToArray(), options);
+            var invokeOpts = GetInvokeOptions(childOpts);
             return Invokes
-                .HelmTemplate(new HelmTemplateArgs { JsonOpts = jsonOptsString }, new InvokeOptions { Provider = options?.Provider })
+                .HelmTemplate(new HelmTemplateArgs { JsonOpts = jsonOptsString }, invokeOpts)
                 .Apply(objs =>
                 {
                     var transformations = cfgBase.Transformations;
@@ -370,14 +372,12 @@ namespace Pulumi.Kubernetes.Helm.V3
                     {
                         transformations = transformations.Append(Parser.SkipAwait).ToList();
                     }
-                    var args = new ConfigGroupArgs
+                    return Parser.ParseYamlDocument(new ParseArgs
                     {
-                        ResourcePrefix = cfgBase.ResourcePrefix,
                         Objs = objs,
-                        Transformations = transformations
-                    };
-                    var opts = new ComponentResourceOptions { Parent = this, DependsOn = dependsOn.ToArray(), Provider = options?.Provider };
-                    return Parser.Parse(args, opts);
+                        Transformations = transformations,
+                        ResourcePrefix = cfgBase.ResourcePrefix
+                    }, childOpts);
                 });
         }
 
@@ -397,9 +397,9 @@ namespace Pulumi.Kubernetes.Helm.V3
             public string? Repo { get; set; }
             [JsonPropertyName("chart")]
             public string? Chart { get; set; }
-            [JsonPropertyName("version")]
-            public string? KubeVersion { get; set; }
             [JsonPropertyName("kube_version")]
+            public string? KubeVersion { get; set; }
+            [JsonPropertyName("version")]
             public string? Version { get; set; }
             [JsonPropertyName("fetch_opts")]
             public JsonOptsFetch? FetchOptions { get; set; }

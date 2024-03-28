@@ -702,29 +702,24 @@ func Test_Apps_Deployment_Without_PersistentVolumeClaims(t *testing.T) {
 	}
 }
 
-type setLastInputs func(obj *unstructured.Unstructured)
-
 func Test_Apps_Deployment_MultipleUpdates(t *testing.T) {
 	tests := []struct {
-		description string
-		inputs      func() *unstructured.Unstructured
-		firstUpdate func(deployments, replicaSets, pods chan watch.Event, timeout chan time.Time,
-			setLast setLastInputs)
+		description   string
+		outputs       func() *unstructured.Unstructured
+		firstUpdate   func(deployments, replicaSets, pods chan watch.Event, timeout chan time.Time)
 		secondUpdate  func(deployments, replicaSets, pods chan watch.Event, timeout chan time.Time)
 		expectedError error
 	}{
 		{
 			description: "Should succeed if replicas are scaled",
-			inputs:      regressionDeploymentScaled3Input,
+			outputs:     regressionDeploymentScaled3Output,
 			firstUpdate: func(
 				deployments, replicaSets, pods chan watch.Event, timeout chan time.Time,
-				setLast setLastInputs,
 			) {
 				computed := regressionDeploymentScaled3()
 				deployments <- watchAddedEvent(computed)
 				replicaSets <- watchAddedEvent(regressionReplicaSetScaled3())
 
-				setLast(regressionDeploymentScaled3Input())
 				// Timeout. Success.
 				timeout <- time.Now()
 			},
@@ -736,12 +731,34 @@ func Test_Apps_Deployment_MultipleUpdates(t *testing.T) {
 				timeout <- time.Now()
 			},
 		},
+		{
+			description: "Should succeed if deployment spec has a no-op replicaset change that doesn't trigger a rollout",
+			outputs:     regressionDeploymentScaled3Output,
+			firstUpdate: func(
+				deployments, replicaSets, pods chan watch.Event, timeout chan time.Time,
+			) {
+				computed := regressionDeploymentScaled3()
+				deployments <- watchAddedEvent(computed)
+				replicaSets <- watchAddedEvent(regressionReplicaSetScaled3())
+
+				// Timeout. Success.
+				timeout <- time.Now()
+			},
+			secondUpdate: func(deployments, replicaSets, pods chan watch.Event, timeout chan time.Time) {
+				deployments <- watchAddedEvent(regressionDeploymentScaled3ExplicitDefault())
+				replicaSets <- watchAddedEvent(regressionReplicaSetScaled3()) // ReplicaSet is still the same as previous step.
+
+				// Timeout. Success.
+				timeout <- time.Now()
+			},
+		},
 	}
 
 	for _, test := range tests {
 		awaiter := makeDeploymentInitAwaiter(
 			updateAwaitConfig{
-				createAwaitConfig: mockAwaitConfig(test.inputs()),
+				createAwaitConfig: mockAwaitConfig(test.outputs()),
+				lastOutputs:       test.outputs(),
 			})
 		deployments := make(chan watch.Event)
 		replicaSets := make(chan watch.Event)
@@ -750,10 +767,7 @@ func Test_Apps_Deployment_MultipleUpdates(t *testing.T) {
 
 		timeout := make(chan time.Time)
 		period := make(chan time.Time)
-		go test.firstUpdate(deployments, replicaSets, pods, timeout,
-			func(obj *unstructured.Unstructured) {
-				awaiter.config.lastInputs = obj
-			})
+		go test.firstUpdate(deployments, replicaSets, pods, timeout)
 
 		err := awaiter.await(deployments, replicaSets, pods, pvcs, timeout, period)
 		assert.Nil(t, err, test.description)
@@ -2121,13 +2135,16 @@ func persistentVolumeClaimPending(namespace, name string) *unstructured.Unstruct
 
 // --------------------------------------------------------------------------
 
-func regressionDeploymentScaled3Input() *unstructured.Unstructured {
+func regressionDeploymentScaled3Output() *unstructured.Unstructured {
 	obj, err := decodeUnstructured(`{
     "apiVersion": "apps/v1",
     "kind": "Deployment",
     "metadata": {
         "name": "frontend-ur1fwk62",
-        "namespace": "default"
+        "namespace": "default",
+        "annotations": {
+            "deployment.kubernetes.io/revision": "1"
+        }
     },
     "spec": {
         "selector": { "matchLabels": { "app": "frontend" } },
@@ -2136,7 +2153,7 @@ func regressionDeploymentScaled3Input() *unstructured.Unstructured {
             "metadata": { "labels": { "app": "frontend" } },
             "spec": { "containers": [{
                 "name": "php-redis",
-                "image": "gcr.io/google-samples/gb-frontend:v4",
+                "image": "us-docker.pkg.dev/google-samples/containers/gke/gb-frontend:v5",
                 "resources": { "requests": { "cpu": "100m", "memory": "100Mi" } },
                 "env": [{ "name": "GET_HOSTS_FROM", "value": "dns" }],
                 "ports": [{ "containerPort": 80 }]
@@ -2202,7 +2219,7 @@ func regressionDeploymentScaled3() *unstructured.Unstructured {
                                 "value": "dns"
                             }
                         ],
-                        "image": "gcr.io/google-samples/gb-frontend:v4",
+                        "image": "us-docker.pkg.dev/google-samples/containers/gke/gb-frontend:v5",
                         "imagePullPolicy": "IfNotPresent",
                         "name": "php-redis",
                         "ports": [
@@ -2250,6 +2267,118 @@ func regressionDeploymentScaled3() *unstructured.Unstructured {
             }
         ],
         "observedGeneration": 1,
+        "readyReplicas": 3,
+        "replicas": 3,
+        "updatedReplicas": 3
+    }
+}`)
+
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+func regressionDeploymentScaled3ExplicitDefault() *unstructured.Unstructured {
+	obj, err := decodeUnstructured(`{
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+        "annotations": {
+            "deployment.kubernetes.io/revision": "1",
+            "pulumi.com/autonamed": "true"
+        },
+        "creationTimestamp": "2018-08-21T21:55:11Z",
+        "generation": 2,
+        "labels": {
+            "app": "frontend"
+        },
+        "name": "frontend-ur1fwk62",
+        "namespace": "default",
+        "resourceVersion": "917821",
+        "selfLink": "/apis/apps/v1/namespaces/default/deployments/frontend-ur1fwk62",
+        "uid": "e0a51d3c-a58c-11e8-8cb4-080027bd9056"
+    },
+    "spec": {
+        "progressDeadlineSeconds": 600,
+        "replicas": 3,
+        "revisionHistoryLimit": 2,
+        "selector": {
+            "matchLabels": {
+                "app": "frontend"
+            }
+        },
+        "strategy": {
+            "rollingUpdate": {
+                "maxSurge": "25%",
+                "maxUnavailable": "25%"
+            },
+            "type": "RollingUpdate"
+        },
+        "template": {
+            "metadata": {
+                "creationTimestamp": null,
+                "labels": {
+                    "app": "frontend"
+                }
+            },
+            "spec": {
+                "containers": [
+                    {
+                        "env": [
+                            {
+                                "name": "GET_HOSTS_FROM",
+                                "value": "dns"
+                            }
+                        ],
+                        "image": "us-docker.pkg.dev/google-samples/containers/gke/gb-frontend:v5",
+                        "imagePullPolicy": "IfNotPresent",
+                        "name": "php-redis",
+                        "ports": [
+                            {
+                                "containerPort": 80,
+                                "protocol": "TCP"
+                            }
+                        ],
+                        "resources": {
+                            "requests": {
+                                "cpu": "100m",
+                                "memory": "100Mi"
+                            }
+                        },
+                        "terminationMessagePath": "/dev/termination-log",
+                        "terminationMessagePolicy": "File"
+                    }
+                ],
+                "dnsPolicy": "ClusterFirst",
+                "restartPolicy": "Always",
+                "schedulerName": "default-scheduler",
+                "securityContext": {},
+                "terminationGracePeriodSeconds": 30
+            }
+        }
+    },
+    "status": {
+        "availableReplicas": 3,
+        "conditions": [
+            {
+                "lastTransitionTime": "2018-08-21T21:55:16Z",
+                "lastUpdateTime": "2018-08-21T21:55:16Z",
+                "message": "Deployment has minimum availability.",
+                "reason": "MinimumReplicasAvailable",
+                "status": "True",
+                "type": "Available"
+            },
+            {
+                "lastTransitionTime": "2018-08-21T21:55:11Z",
+                "lastUpdateTime": "2018-08-21T21:55:16Z",
+                "message": "ReplicaSet \"frontend-ur1fwk62-777d669468\" has successfully progressed.",
+                "reason": "NewReplicaSetAvailable",
+                "status": "True",
+                "type": "Progressing"
+            }
+        ],
+        "observedGeneration": 2,
         "readyReplicas": 3,
         "replicas": 3,
         "updatedReplicas": 3
@@ -2314,7 +2443,7 @@ func regressionDeploymentScaled5() *unstructured.Unstructured {
                                 "value": "dns"
                             }
                         ],
-                        "image": "gcr.io/google-samples/gb-frontend:v4",
+                        "image": "us-docker.pkg.dev/google-samples/containers/gke/gb-frontend:v5",
                         "imagePullPolicy": "IfNotPresent",
                         "name": "php-redis",
                         "ports": [
@@ -2432,7 +2561,7 @@ func regressionReplicaSetScaled3() *unstructured.Unstructured {
                                 "value": "dns"
                             }
                         ],
-                        "image": "gcr.io/google-samples/gb-frontend:v4",
+                        "image": "us-docker.pkg.dev/google-samples/containers/gke/gb-frontend:v5",
                         "imagePullPolicy": "IfNotPresent",
                         "name": "php-redis",
                         "ports": [
@@ -2531,7 +2660,7 @@ func regressionReplicaSetScaled5() *unstructured.Unstructured {
                                 "value": "dns"
                             }
                         ],
-                        "image": "gcr.io/google-samples/gb-frontend:v4",
+                        "image": "us-docker.pkg.dev/google-samples/containers/gke/gb-frontend:v5",
                         "imagePullPolicy": "IfNotPresent",
                         "name": "php-redis",
                         "ports": [

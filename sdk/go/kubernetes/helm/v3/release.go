@@ -10,7 +10,6 @@ import (
 	"errors"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/utilities"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumix"
 )
 
 // A `Release` is an instance of a chart running in a Kubernetes cluster. A `Chart` is a Helm package. It contains all the
@@ -19,6 +18,8 @@ import (
 // This resource models a Helm Release as if it were created by the Helm CLI. The underlying implementation embeds Helm as
 // a library to perform the orchestration of the resources. As a result, the full spectrum of Helm features are supported
 // natively.
+//
+// You may also want to consider the `Chart` resource as an alternative method for managing helm charts. For more information about the trade-offs between these options see: [Choosing the right Helm resource for your use case](https://www.pulumi.com/registry/packages/kubernetes/how-to-guides/choosing-the-right-helm-resource-for-your-use-case)
 //
 // ## Example Usage
 // ### Local Chart Directory
@@ -581,12 +582,6 @@ func (i *Release) ToReleaseOutputWithContext(ctx context.Context) ReleaseOutput 
 	return pulumi.ToOutputWithContext(ctx, i).(ReleaseOutput)
 }
 
-func (i *Release) ToOutput(ctx context.Context) pulumix.Output[*Release] {
-	return pulumix.Output[*Release]{
-		OutputState: i.ToReleaseOutputWithContext(ctx).OutputState,
-	}
-}
-
 // ReleaseArrayInput is an input type that accepts ReleaseArray and ReleaseArrayOutput values.
 // You can construct a concrete instance of `ReleaseArrayInput` via:
 //
@@ -610,12 +605,6 @@ func (i ReleaseArray) ToReleaseArrayOutput() ReleaseArrayOutput {
 
 func (i ReleaseArray) ToReleaseArrayOutputWithContext(ctx context.Context) ReleaseArrayOutput {
 	return pulumi.ToOutputWithContext(ctx, i).(ReleaseArrayOutput)
-}
-
-func (i ReleaseArray) ToOutput(ctx context.Context) pulumix.Output[[]*Release] {
-	return pulumix.Output[[]*Release]{
-		OutputState: i.ToReleaseArrayOutputWithContext(ctx).OutputState,
-	}
 }
 
 // ReleaseMapInput is an input type that accepts ReleaseMap and ReleaseMapOutput values.
@@ -643,12 +632,6 @@ func (i ReleaseMap) ToReleaseMapOutputWithContext(ctx context.Context) ReleaseMa
 	return pulumi.ToOutputWithContext(ctx, i).(ReleaseMapOutput)
 }
 
-func (i ReleaseMap) ToOutput(ctx context.Context) pulumix.Output[map[string]*Release] {
-	return pulumix.Output[map[string]*Release]{
-		OutputState: i.ToReleaseMapOutputWithContext(ctx).OutputState,
-	}
-}
-
 type ReleaseOutput struct{ *pulumi.OutputState }
 
 func (ReleaseOutput) ElementType() reflect.Type {
@@ -661,12 +644,6 @@ func (o ReleaseOutput) ToReleaseOutput() ReleaseOutput {
 
 func (o ReleaseOutput) ToReleaseOutputWithContext(ctx context.Context) ReleaseOutput {
 	return o
-}
-
-func (o ReleaseOutput) ToOutput(ctx context.Context) pulumix.Output[*Release] {
-	return pulumix.Output[*Release]{
-		OutputState: o.OutputState,
-	}
 }
 
 // Whether to allow Null values in helm chart configs.
@@ -858,12 +835,6 @@ func (o ReleaseArrayOutput) ToReleaseArrayOutputWithContext(ctx context.Context)
 	return o
 }
 
-func (o ReleaseArrayOutput) ToOutput(ctx context.Context) pulumix.Output[[]*Release] {
-	return pulumix.Output[[]*Release]{
-		OutputState: o.OutputState,
-	}
-}
-
 func (o ReleaseArrayOutput) Index(i pulumi.IntInput) ReleaseOutput {
 	return pulumi.All(o, i).ApplyT(func(vs []interface{}) *Release {
 		return vs[0].([]*Release)[vs[1].(int)]
@@ -882,12 +853,6 @@ func (o ReleaseMapOutput) ToReleaseMapOutput() ReleaseMapOutput {
 
 func (o ReleaseMapOutput) ToReleaseMapOutputWithContext(ctx context.Context) ReleaseMapOutput {
 	return o
-}
-
-func (o ReleaseMapOutput) ToOutput(ctx context.Context) pulumix.Output[map[string]*Release] {
-	return pulumix.Output[map[string]*Release]{
-		OutputState: o.OutputState,
-	}
 }
 
 func (o ReleaseMapOutput) MapIndex(k pulumi.StringInput) ReleaseOutput {

@@ -22,10 +22,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/user"
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,10 +41,12 @@ import (
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/clients"
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/cluster"
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/gen"
+	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/host"
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/kinds"
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/logging"
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/metadata"
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/openapi"
+	providerresource "github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/provider/resource"
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/ssa"
 	pulumischema "github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/pulumi/pulumi/pkg/v3/resource/deploy/providers"
@@ -114,7 +116,7 @@ type kubeOpts struct {
 type kubeProvider struct {
 	pulumirpc.UnimplementedResourceProviderServer
 
-	host             *provider.HostClient
+	host             host.HostClient
 	canceler         *cancellationContext
 	name             string
 	version          string
@@ -145,21 +147,22 @@ type kubeProvider struct {
 	clusterUnreachable       bool   // Kubernetes cluster is unreachable.
 	clusterUnreachableReason string // Detailed error message if cluster is unreachable.
 
-	config     *rest.Config // Cluster config, e.g., through $KUBECONFIG file.
-	kubeconfig clientcmd.ClientConfig
+	makeClient func(context.Context, *rest.Config) (*clients.DynamicClientSet, *clients.LogClient, error)
 	clientSet  *clients.DynamicClientSet
 	logClient  *clients.LogClient
 	k8sVersion cluster.ServerVersion
 
 	resources      k8sopenapi.Resources
 	resourcesMutex sync.RWMutex
+
+	resourceProviders map[string]providerresource.ResourceProviderFactory
 }
 
 var _ pulumirpc.ResourceProviderServer = (*kubeProvider)(nil)
 
 func makeKubeProvider(
-	host *provider.HostClient, name, version string, pulumiSchema, terraformMapping []byte,
-) (pulumirpc.ResourceProviderServer, error) {
+	host host.HostClient, name, version string, pulumiSchema, terraformMapping []byte,
+) (*kubeProvider, error) {
 	return &kubeProvider{
 		host:                        host,
 		canceler:                    makeCancellationContext(),
@@ -172,7 +175,23 @@ func makeKubeProvider(
 		suppressDeprecationWarnings: false,
 		deleteUnreachable:           false,
 		skipUpdateUnreachable:       false,
+		makeClient:                  makeClient,
+		resourceProviders:           resourceProviders,
 	}, nil
+}
+
+// makeClient makes a client to connect to a Kubernetes cluster using the given config.
+// ctx is a cancellation context that may be used to cancel any subsequent requests made by the clients.
+func makeClient(ctx context.Context, config *rest.Config) (*clients.DynamicClientSet, *clients.LogClient, error) {
+	cs, err := clients.NewDynamicClientSet(config)
+	if err != nil {
+		return nil, nil, err
+	}
+	lc, err := clients.MakeLogClient(ctx, config)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cs, lc, nil
 }
 
 func (k *kubeProvider) getResources() (k8sopenapi.Resources, error) {
@@ -220,11 +239,6 @@ func (k *kubeProvider) GetMapping(ctx context.Context, request *pulumirpc.GetMap
 		Provider: "kubernetes",
 		Data:     k.terraformMapping,
 	}, nil
-}
-
-// Construct creates a new instance of the provided component resource and returns its state.
-func (k *kubeProvider) Construct(ctx context.Context, req *pulumirpc.ConstructRequest) (*pulumirpc.ConstructResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "Construct is not yet implemented")
 }
 
 // GetSchema returns the JSON-encoded schema for this provider's package.
@@ -360,13 +374,15 @@ func (k *kubeProvider) DiffConfig(ctx context.Context, req *pulumirpc.DiffReques
 	}
 
 	// We can't tell for sure if a computed value has changed, so we make the conservative choice
-	// and force a replacement.
-	if news["kubeconfig"].IsComputed() {
-		return &pulumirpc.DiffResponse{
-			Changes:  pulumirpc.DiffResponse_DIFF_SOME,
-			Diffs:    []string{"kubeconfig"},
-			Replaces: []string{"kubeconfig"},
-		}, nil
+	// and force a replacement. Note that getActiveClusterFromConfig relies on all three of the below properties.
+	for _, key := range []resource.PropertyKey{"kubeconfig", "context", "cluster"} {
+		if news[key].IsComputed() {
+			return &pulumirpc.DiffResponse{
+				Changes:  pulumirpc.DiffResponse_DIFF_SOME,
+				Diffs:    []string{string(key)},
+				Replaces: []string{string(key)},
+			}, nil
+		}
 	}
 
 	var diffs, replaces []string
@@ -405,10 +421,17 @@ func (k *kubeProvider) DiffConfig(ctx context.Context, req *pulumirpc.DiffReques
 	// The alternative of ignoring changes to the kubeconfig is untenable; if the k8s cluster has
 	// changed, any dependent resources must be recreated, and ignoring changes prevents that from
 	// happening.
-	oldActiveCluster := getActiveClusterFromConfig(oldConfig, olds)
-	activeCluster := getActiveClusterFromConfig(newConfig, news)
-	if !reflect.DeepEqual(oldActiveCluster, activeCluster) {
-		replaces = diffs
+	oldActiveCluster, oldFound := getActiveClusterFromConfig(oldConfig, olds)
+	activeCluster, found := getActiveClusterFromConfig(newConfig, news)
+	if !oldFound || !found {
+		// The config is either ambient or invalid, so we can't draw any conclusions.
+	} else if !reflect.DeepEqual(oldActiveCluster, activeCluster) {
+		// one of these properties must have changed for the active cluster to change.
+		for _, key := range []string{"kubeconfig", "context", "cluster"} {
+			if slices.Contains(diffs, key) {
+				replaces = append(replaces, key)
+			}
+		}
 	}
 	logger.V(7).Infof("%s: diffs %v / replaces %v", label, diffs, replaces)
 
@@ -646,39 +669,9 @@ func (k *kubeProvider) Configure(_ context.Context, req *pulumirpc.ConfigureRequ
 
 	var kubeconfig clientcmd.ClientConfig
 	var apiConfig *clientapi.Config
-	homeDir := func() string {
-		// Ignore errors. The filepath will be checked later, so we can handle failures there.
-		usr, _ := user.Current()
-		return usr.HomeDir
-	}
 	// Note: the Python SDK was setting the kubeconfig value to "" by default, so explicitly check for empty string.
 	if pathOrContents, ok := vars["kubernetes:config:kubeconfig"]; ok && pathOrContents != "" {
-		var contents string
-
-		// Handle the '~' character if it is set in the config string. Normally, this would be expanded by the shell
-		// into the user's home directory, but we have to do that manually if it is set in a config value.
-		if pathOrContents == "~" {
-			// In case of "~", which won't be caught by the "else if"
-			pathOrContents = homeDir()
-		} else if strings.HasPrefix(pathOrContents, "~/") {
-			pathOrContents = filepath.Join(homeDir(), pathOrContents[2:])
-		}
-
-		// If the variable is a valid filepath, load the file and parse the contents as a k8s config.
-		_, err := os.Stat(pathOrContents)
-		if err == nil {
-			b, err := os.ReadFile(pathOrContents)
-			if err != nil {
-				unreachableCluster(err)
-			} else {
-				contents = string(b)
-			}
-		} else { // Assume the contents are a k8s config.
-			contents = pathOrContents
-		}
-
-		// Load the contents of the k8s config.
-		apiConfig, err = clientcmd.Load([]byte(contents))
+		apiConfig, err := parseKubeconfigString(pathOrContents)
 		if err != nil {
 			unreachableCluster(err)
 		} else {
@@ -742,12 +735,16 @@ func (k *kubeProvider) Configure(_ context.Context, req *pulumirpc.ConfigureRequ
 	}
 
 	// Attempt to load the configuration from the provided kubeconfig. If this fails, mark the cluster as unreachable.
+	var config *rest.Config
 	if !k.clusterUnreachable {
-		config, err := kubeconfig.ClientConfig()
+		contract.Assertf(kubeconfig != nil, "expected kubeconfig to be initialized")
+		var err error
+		config, err = kubeconfig.ClientConfig()
 		if err != nil {
 			k.clusterUnreachable = true
 			k.clusterUnreachableReason = fmt.Sprintf("unable to load Kubernetes client configuration from kubeconfig file. Make sure you have: \n\n"+
 				" \t • set up the provider as per https://www.pulumi.com/registry/packages/kubernetes/installation-configuration/ \n\n %v", err)
+			config = nil
 		} else {
 			if kubeClientSettings.Burst != nil {
 				config.Burst = *kubeClientSettings.Burst
@@ -761,27 +758,19 @@ func (k *kubeProvider) Configure(_ context.Context, req *pulumirpc.ConfigureRequ
 				config.Timeout = time.Duration(*kubeClientSettings.Timeout) * time.Second
 				logger.V(9).Infof("kube client timeout set to %v", config.Timeout)
 			}
-			warningConfig := rest.CopyConfig(config)
-			warningConfig.WarningHandler = rest.NoWarnings{}
-			k.config = warningConfig
-			k.kubeconfig = kubeconfig
+			config.WarningHandler = rest.NoWarnings{}
 		}
+	}
+
+	var err error
+	k.clientSet, k.logClient, err = k.makeClient(k.canceler.context, config)
+	if err != nil {
+		return nil, err
 	}
 
 	// These operations require a reachable cluster.
 	if !k.clusterUnreachable {
-		cs, err := clients.NewDynamicClientSet(k.config)
-		if err != nil {
-			return nil, err
-		}
-		k.clientSet = cs
-		lc, err := clients.NewLogClient(k.canceler.context, k.config)
-		if err != nil {
-			return nil, err
-		}
-		k.logClient = lc
-
-		k.k8sVersion = cluster.TryGetServerVersion(cs.DiscoveryClientCached)
+		k.k8sVersion = cluster.TryGetServerVersion(k.clientSet.DiscoveryClientCached)
 
 		if k.k8sVersion.Compare(cluster.ServerVersion{Major: 1, Minor: 13}) < 0 {
 			return nil, fmt.Errorf("minimum supported cluster version is v1.13. found v%s", k.k8sVersion)
@@ -794,14 +783,12 @@ func (k *kubeProvider) Configure(_ context.Context, req *pulumirpc.ConfigureRequ
 		}
 	}
 
-	var err error
-
 	k.helmReleaseProvider, err = newHelmReleaseProvider(
 		k.host,
 		k.canceler,
 		apiConfig,
 		overrides,
-		k.config,
+		config,
 		k.clientSet,
 		k.helmDriver,
 		k.defaultNamespace,
@@ -1295,15 +1282,15 @@ func (k *kubeProvider) Check(ctx context.Context, req *pulumirpc.CheckRequest) (
 		return k.helmReleaseProvider.Check(ctx, req)
 	}
 
-	if isListURN(urn) {
+	if kinds.IsListURN(urn) {
 		// TODO: It might be possible to automatically expand List resources into a list of the underlying resources.
 		//       Until then, return a descriptive error message. https://github.com/pulumi/pulumi-kubernetes/issues/2494
 		return nil, fmt.Errorf("list resources exist for compatibility with YAML manifests and Helm charts, " +
 			"and cannot be created directly. Use the underlying resource type instead")
 	}
 
-	if !k.serverSideApplyMode && isPatchURN(urn) {
-		return nil, fmt.Errorf("patch resources require Server-side Apply mode, which is enabled using the " +
+	if !k.serverSideApplyMode && kinds.IsPatchURN(urn) {
+		return nil, fmt.Errorf("patch resources require Server-Side Apply mode, which is enabled using the " +
 			"`enableServerSideApply` Provider config")
 	}
 
@@ -1341,9 +1328,9 @@ func (k *kubeProvider) Check(ctx context.Context, req *pulumirpc.CheckRequest) (
 		return nil, err
 	}
 
-	if k.serverSideApplyMode && isPatchURN(urn) {
+	if k.serverSideApplyMode && kinds.IsPatchURN(urn) {
 		if len(newInputs.GetName()) == 0 {
-			return nil, fmt.Errorf("patch resources require the resource `.metadata.name` to be set")
+			return nil, fmt.Errorf("patch resources require the `.metadata.name` field to be set")
 		}
 	}
 
@@ -1358,10 +1345,9 @@ func (k *kubeProvider) Check(ctx context.Context, req *pulumirpc.CheckRequest) (
 	// needs to be `DeleteBeforeReplace`'d. If the resource is marked `DeleteBeforeReplace`, then
 	// `Create` will allocate it a new name later.
 	if len(oldInputs.Object) > 0 {
-		// NOTE: If old inputs exist, they have a name, either provided by the user or filled in with a
-		// previous run of `Check`.
-		contract.Assertf(oldInputs.GetName() != "", "expected object name to be nonempty: %v", oldInputs)
-		metadata.AdoptOldAutonameIfUnnamed(newInputs, oldInputs)
+		// NOTE: If old inputs exist, they MAY have a name, either provided by the user, or based on generateName,
+		// or filled in with a previous run of `Check`.
+		metadata.AdoptOldAutonameIfUnnamed(newInputs, oldInputs, news)
 
 		// If the resource has existing state, we only set the "managed-by: pulumi" label if it is already present. This
 		// avoids causing diffs for cases where the resource is being imported, or was created using SSA. The goal in
@@ -1384,6 +1370,14 @@ func (k *kubeProvider) Check(ctx context.Context, req *pulumirpc.CheckRequest) (
 				return nil, pkgerrors.Wrapf(err,
 					"Failed to create object because of a problem setting managed-by labels")
 			}
+		}
+	}
+	if metadata.IsGenerateName(newInputs, news) {
+		if k.serverSideApplyMode {
+			return nil, fmt.Errorf("the `.metadata.generateName` field is not supported in Server-Side Apply mode")
+		}
+		if k.yamlRenderMode {
+			return nil, fmt.Errorf("the `.metadata.generateName` field is not supported in YAML rendering mode")
 		}
 	}
 
@@ -1456,6 +1450,15 @@ func (k *kubeProvider) Check(ctx context.Context, req *pulumirpc.CheckRequest) (
 				return nil, pkgerrors.Wrapf(err, "unable to fetch schema for resource type %s/%s",
 					newInputs.GetAPIVersion(), newInputs.GetKind())
 			}
+		}
+	}
+
+	if clients.IsCRD(newInputs) {
+		// add the CRD to the cache such that it contains all the CRDs that the program intends to create.
+		// Do it now instead of later because update is called only if there's a non-empty diff,
+		// and we want to ensure that the CRD is in the cache to support lookups by the component resources.
+		if err := k.clientSet.CRDCache.AddCRD(newInputs); err != nil {
+			return nil, err
 		}
 	}
 
@@ -1534,6 +1537,9 @@ func (k *kubeProvider) Diff(ctx context.Context, req *pulumirpc.DiffRequest) (*p
 	//
 
 	urn := resource.URN(req.GetUrn())
+	if isHelmRelease(urn) {
+		return k.helmReleaseProvider.Diff(ctx, req)
+	}
 
 	label := fmt.Sprintf("%s.Diff(%s)", k.label(), urn)
 	logger.V(9).Infof("%s executing", label)
@@ -1561,6 +1567,7 @@ func (k *kubeProvider) Diff(ctx context.Context, req *pulumirpc.DiffRequest) (*p
 	newInputs := propMapToUnstructured(newResInputs)
 
 	oldInputs, oldLive := parseCheckpointObject(oldState)
+	contract.Assertf(oldLive.GetName() != "", "expected live object name to be nonempty: %v", oldLive)
 
 	oldInputs, err = normalizeInputs(oldInputs)
 	if err != nil {
@@ -1573,10 +1580,6 @@ func (k *kubeProvider) Diff(ctx context.Context, req *pulumirpc.DiffRequest) (*p
 	oldLivePruned := pruneLiveState(oldLive, oldInputs)
 
 	gvk := k.gvkFromUnstructured(newInputs)
-
-	if isHelmRelease(urn) && !hasComputedValue(newInputs) {
-		return k.helmReleaseProvider.Diff(ctx, req)
-	}
 
 	namespacedKind, err := clients.IsNamespacedKind(gvk, k.clientSet)
 	if err != nil {
@@ -1609,6 +1612,12 @@ func (k *kubeProvider) Diff(ctx context.Context, req *pulumirpc.DiffRequest) (*p
 	if k.serverSideApplyMode && len(oldLivePruned.GetResourceVersion()) > 0 {
 		oldLivePruned.SetResourceVersion("")
 	}
+	// If a name was specified in the new inputs, be sure that the old live object has the previous name.
+	// This makes it possible to update the program to set `.metadata.name` to the name that was
+	// made by `.metadata.generateName` without triggering replacement.
+	if newInputs.GetName() != "" {
+		oldLivePruned.SetName(oldLive.GetName())
+	}
 
 	var patch []byte
 	patchBase := oldLivePruned.Object
@@ -1617,15 +1626,15 @@ func (k *kubeProvider) Diff(ctx context.Context, req *pulumirpc.DiffRequest) (*p
 	patch, err = k.inputPatch(oldLivePruned, newInputs)
 	if err != nil {
 		return nil, pkgerrors.Wrapf(
-			err, "Failed to check for changes in resource %s/%s", newInputs.GetNamespace(), newInputs.GetName())
+			err, "Failed to check for changes in resource %q", urn)
 	}
 
 	patchObj := map[string]any{}
 	if err = json.Unmarshal(patch, &patchObj); err != nil {
 		return nil, pkgerrors.Wrapf(
-			err, "Failed to check for changes in resource %s/%s because of an error serializing "+
+			err, "Failed to check for changes in resource %q because of an error serializing "+
 				"the JSON patch describing resource changes",
-			newInputs.GetNamespace(), newInputs.GetName())
+			urn)
 	}
 
 	hasChanges := pulumirpc.DiffResponse_DIFF_NONE
@@ -1635,14 +1644,14 @@ func (k *kubeProvider) Diff(ctx context.Context, req *pulumirpc.DiffRequest) (*p
 	if len(patchObj) != 0 {
 		// Changing the identity of the resource always causes a replacement.
 		forceNewFields := []string{".metadata.name", ".metadata.namespace"}
-		if !isPatchURN(urn) { // Patch resources can be updated in place for all other properties.
+		if !kinds.IsPatchURN(urn) { // Patch resources can be updated in place for all other properties.
 			forceNewFields = k.forceNewProperties(newInputs)
 		}
 		if detailedDiff, err = convertPatchToDiff(patchObj, patchBase, newInputs.Object, oldLivePruned.Object, forceNewFields...); err != nil {
 			return nil, pkgerrors.Wrapf(
-				err, "Failed to check for changes in resource %s/%s because of an error "+
+				err, "Failed to check for changes in resource %q because of an error "+
 					"converting JSON patch describing resource changes to a diff",
-				newInputs.GetNamespace(), newInputs.GetName())
+				urn)
 		}
 
 		// Remove any ignored changes from the computed diff.
@@ -1692,7 +1701,7 @@ func (k *kubeProvider) Diff(ctx context.Context, req *pulumirpc.DiffRequest) (*p
 		switch newInputs.GetKind() {
 		case "Job":
 			// Fetch current Job status and check point-in-time readiness. Errors are ignored.
-			if live, err := k.readLiveObject(newInputs); err == nil {
+			if live, err := k.readLiveObject(oldLive); err == nil {
 				jobChecker := checkjob.NewJobChecker()
 				job, err := clients.FromUnstructured(live)
 				if err == nil {
@@ -1712,14 +1721,16 @@ func (k *kubeProvider) Diff(ctx context.Context, req *pulumirpc.DiffRequest) (*p
 	deleteBeforeReplace :=
 		// 1. We know resource must be replaced.
 		len(replaces) > 0 &&
-			// 2. Object is NOT autonamed (i.e., user manually named it, and therefore we can't
+			// 2. Object is named (i.e., not using metadata.generateName).
+			metadata.IsNamed(newInputs, newResInputs) &&
+			// 3. Object is NOT autonamed (i.e., user manually named it, and therefore we can't
 			// auto-generate the name).
 			!metadata.IsAutonamed(newInputs) &&
-			// 3. The new, user-specified name is the same as the old name.
-			newInputs.GetName() == oldLivePruned.GetName() &&
-			// 4. The resource is being deployed to the same namespace (i.e., we aren't creating the
+			// 4. The new, user-specified name is the same as the old name.
+			newInputs.GetName() == oldLive.GetName() &&
+			// 5. The resource is being deployed to the same namespace (i.e., we aren't creating the
 			// object in a new namespace and then deleting the old one).
-			newInputs.GetNamespace() == oldLivePruned.GetNamespace()
+			newInputs.GetNamespace() == oldLive.GetNamespace()
 
 	return &pulumirpc.DiffResponse{
 		Changes:             hasChanges,
@@ -1749,8 +1760,7 @@ func (k *kubeProvider) Create(
 	//   resource. This is important both for `Diff` and for `Update`. See comments in those methods for details.
 	//
 	urn := resource.URN(req.GetUrn())
-
-	if isHelmRelease(urn) && !req.GetPreview() {
+	if isHelmRelease(urn) {
 		return k.helmReleaseProvider.Create(ctx, req)
 	}
 
@@ -1778,10 +1788,10 @@ func (k *kubeProvider) Create(
 
 	// Skip if:
 	// 1: The input values contain unknowns
-	// 2: The resource GVK does not exist
+	// 2: The cluster is unreachable or the resource GVK does not exist
 	// 3: The resource is a Patch resource
 	// 4: We are in client-side-apply mode
-	skipPreview := hasComputedValue(newInputs) || !k.gvkExists(newInputs) || isPatchURN(urn) || !k.serverSideApplyMode
+	skipPreview := hasComputedValue(newInputs) || !k.gvkExists(newInputs) || kinds.IsPatchURN(urn) || !k.serverSideApplyMode
 	// If this is a preview and the input meets one of the skip criteria, then return them as-is. This is compatible
 	// with prior behavior implemented by the Pulumi engine.
 	if req.GetPreview() && skipPreview {
@@ -1872,22 +1882,28 @@ func (k *kubeProvider) Create(
 			// If it's a "no match" error, this is probably a CustomResource with no corresponding
 			// CustomResourceDefinition. This usually happens if the CRD was not created, and we
 			// print a more useful error message in this case.
+			gvk, err := k.gvkFromURN(urn)
+			if err != nil {
+				return nil, err
+			}
+			gvkStr := gvk.GroupVersion().String() + "/" + gvk.Kind
 			return nil, pkgerrors.Wrapf(
-				awaitErr, "creation of resource %s failed because the Kubernetes API server "+
+				awaitErr, "creation of resource %q with kind %s failed because the Kubernetes API server "+
 					"reported that the apiVersion for this resource does not exist. "+
-					"Verify that any required CRDs have been created", fqObjName(newInputs))
+					"Verify that any required CRDs have been created", urn, gvkStr)
 		}
 		partialErr, isPartialErr := awaitErr.(await.PartialError)
 		if !isPartialErr {
 			// Object creation failed.
 			return nil, pkgerrors.Wrapf(
 				awaitErr,
-				"resource %s was not successfully created by the Kubernetes API server ", fqObjName(newInputs))
+				"resource %q was not successfully created by the Kubernetes API server ", urn)
 		}
 
 		// Resource was created, but failed to become fully initialized.
 		initialized = partialErr.Object()
 	}
+	contract.Assertf(initialized.GetName() != "", "expected live object name to be nonempty: %v", initialized)
 
 	// We need to delete the empty status field returned from the API server if we are in
 	// preview mode. Having the status field set will cause a panic during preview if the Pulumi
@@ -1914,8 +1930,8 @@ func (k *kubeProvider) Create(
 		return nil, partialError(
 			fqObjName(initialized),
 			pkgerrors.Wrapf(
-				awaitErr, "resource %s was successfully created, but the Kubernetes API server "+
-					"reported that it failed to fully initialize or become live", fqObjName(newInputs)),
+				awaitErr, "resource %q was successfully created, but the Kubernetes API server "+
+					"reported that it failed to fully initialize or become live", urn),
 			inputsAndComputed,
 			nil)
 	}
@@ -2116,6 +2132,7 @@ func (k *kubeProvider) Read(ctx context.Context, req *pulumirpc.ReadRequest) (*p
 		// If we get here, resource successfully registered with the API server, but failed to
 		// initialize.
 	}
+	contract.Assertf(liveObj.GetName() != "", "expected live object name to be nonempty: %v", liveObj)
 
 	// Prune the live inputs to remove properties that are not present in the program inputs.
 	liveInputs := pruneLiveState(liveObj, oldInputs)
@@ -2218,6 +2235,10 @@ func (k *kubeProvider) Update(
 	//
 
 	urn := resource.URN(req.GetUrn())
+	if isHelmRelease(urn) {
+		return k.helmReleaseProvider.Update(ctx, req)
+	}
+
 	label := fmt.Sprintf("%s.Update(%s)", k.label(), urn)
 	logger.V(9).Infof("%s executing", label)
 
@@ -2258,9 +2279,6 @@ func (k *kubeProvider) Update(
 		return &pulumirpc.UpdateResponse{Properties: req.News}, nil
 	}
 
-	if isHelmRelease(urn) {
-		return k.helmReleaseProvider.Update(ctx, req)
-	}
 	// Ignore old state; we'll get it from Kubernetes later.
 	oldInputs, oldLive := parseCheckpointObject(oldState)
 
@@ -2327,7 +2345,8 @@ func (k *kubeProvider) Update(
 			Resources:         resources,
 			ServerSideApply:   k.serverSideApplyMode,
 		},
-		Previous:      oldLivePruned,
+		OldInputs:     oldLivePruned,
+		OldOutputs:    oldLive,
 		Inputs:        newInputs,
 		Timeout:       req.Timeout,
 		Preview:       req.GetPreview(),
@@ -2346,22 +2365,24 @@ func (k *kubeProvider) Update(
 			// CustomResourceDefinition. This usually happens if the CRD was not created, and we
 			// print a more useful error message in this case.
 			return nil, pkgerrors.Wrapf(
-				awaitErr, "update of resource %s failed because the Kubernetes API server "+
+				awaitErr, "update of resource %q failed because the Kubernetes API server "+
 					"reported that the apiVersion for this resource does not exist. "+
-					"Verify that any required CRDs have been created", fqObjName(newInputs))
+					"Verify that any required CRDs have been created", urn)
 		}
 
 		var getErr error
-		initialized, getErr = k.readLiveObject(newInputs)
+		initialized, getErr = k.readLiveObject(oldLive)
 		if getErr != nil {
 			// Object update/creation failed.
 			return nil, pkgerrors.Wrapf(
-				awaitErr, "update of resource %s failed because the Kubernetes API server "+
-					"reported that it failed to fully initialize or become live", fqObjName(newInputs))
+				awaitErr, "update of resource %q failed because the Kubernetes API server "+
+					"reported that it failed to fully initialize or become live", urn)
 		}
 		// If we get here, resource successfully registered with the API server, but failed to
 		// initialize.
 	}
+	contract.Assertf(initialized.GetName() != "", "expected live object name to be nonempty: %v", initialized)
+
 	// Return a new "checkpoint object".
 	obj := checkpointObject(newInputs, initialized, newResInputs, initialAPIVersion, fieldManager)
 	inputsAndComputed, err := plugin.MarshalProperties(
@@ -2382,7 +2403,7 @@ func (k *kubeProvider) Update(
 			fqObjName(initialized),
 			pkgerrors.Wrapf(
 				awaitErr, "the Kubernetes API server reported that %q failed to fully initialize "+
-					"or become live", fqObjName(newInputs)),
+					"or become live", fqObjName(initialized)),
 			inputsAndComputed,
 			nil)
 	}
@@ -2390,12 +2411,12 @@ func (k *kubeProvider) Update(
 	if k.serverSideApplyMode {
 		// For non-preview updates, drop the old fieldManager if the value changes.
 		if !req.GetPreview() && fieldManagerOld != fieldManager {
-			client, err := k.clientSet.ResourceClientForObject(newInputs)
+			client, err := k.clientSet.ResourceClientForObject(initialized)
 			if err != nil {
 				return nil, err
 			}
 
-			err = ssa.Relinquish(k.canceler.context, client, newInputs, fieldManagerOld)
+			err = ssa.Relinquish(k.canceler.context, client, initialized, fieldManagerOld)
 			if err != nil {
 				return nil, err
 			}
@@ -2482,7 +2503,8 @@ func (k *kubeProvider) Delete(ctx context.Context, req *pulumirpc.DeleteRequest)
 			Resources:         resources,
 			ServerSideApply:   k.serverSideApplyMode,
 		},
-		Inputs:  current,
+		Inputs:  oldInputs,
+		Outputs: current,
 		Name:    name,
 		Timeout: req.Timeout,
 	}
@@ -2495,7 +2517,7 @@ func (k *kubeProvider) Delete(ctx context.Context, req *pulumirpc.DeleteRequest)
 			// to consider the CR to be deleted as well in this case.
 			return &pbempty.Empty{}, nil
 		}
-		if isPatchURN(urn) && await.IsDeleteRequiredFieldErr(awaitErr) {
+		if kinds.IsPatchURN(urn) && await.IsDeleteRequiredFieldErr(awaitErr) {
 			if cause, ok := apierrors.StatusCause(awaitErr, metav1.CauseTypeFieldValueRequired); ok {
 				awaitErr = fmt.Errorf(
 					"this Patch resource is currently managing a required field, so it can't be deleted "+
@@ -2528,16 +2550,6 @@ func (k *kubeProvider) Delete(ctx context.Context, req *pulumirpc.DeleteRequest)
 	}
 
 	return &pbempty.Empty{}, nil
-}
-
-// isPatchURN returns true if the URN is for a Patch resource.
-func isPatchURN(urn resource.URN) bool {
-	return kinds.PatchQualifiedTypes.Has(urn.QualifiedType().String())
-}
-
-// isListURN returns true if the URN is for a List resource.
-func isListURN(urn resource.URN) bool {
-	return kinds.ListQualifiedTypes.Has(urn.QualifiedType().String())
 }
 
 // GetPluginInfo returns generic information about this plugin, like its version.
@@ -2614,6 +2626,7 @@ func (k *kubeProvider) gvkFromURN(urn resource.URN) (schema.GroupVersionKind, er
 }
 
 func (k *kubeProvider) readLiveObject(obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	contract.Assertf(obj.GetName() != "", "expected object name to be nonempty: %v", obj)
 	rc, err := k.clientSet.ResourceClientForObject(obj)
 	if err != nil {
 		return nil, err
@@ -2757,7 +2770,7 @@ func shouldNormalize(uns *unstructured.Unstructured) bool {
 // are set to the same output shape. This is important to avoid generating diffs for inputs that will produce the same
 // result on the cluster.
 func normalizeInputs(uns *unstructured.Unstructured) (*unstructured.Unstructured, error) {
-	if shouldNormalize(uns) {
+	if !hasComputedValue(uns) && shouldNormalize(uns) {
 		normalized, err := clients.Normalize(uns)
 		if err != nil {
 			return nil, err
@@ -2778,9 +2791,28 @@ func normalizeInputs(uns *unstructured.Unstructured) (*unstructured.Unstructured
 	return uns, nil
 }
 
+func combineMapReplv(replvs ...func(resource.PropertyValue) (any, bool)) func(resource.PropertyValue) (any, bool) {
+	return func(v resource.PropertyValue) (any, bool) {
+		for _, replv := range replvs {
+			if r, ok := replv(v); ok {
+				return r, true
+			}
+		}
+		return "", false
+	}
+}
+
 func mapReplStripSecrets(v resource.PropertyValue) (any, bool) {
 	if v.IsSecret() {
 		return v.SecretValue().Element.MapRepl(nil, mapReplStripSecrets), true
+	}
+
+	return nil, false
+}
+
+func mapReplStripComputed(v resource.PropertyValue) (any, bool) {
+	if v.IsComputed() {
+		return nil, true
 	}
 
 	return nil, false
@@ -3003,9 +3035,9 @@ type patchConverter struct {
 func (pc *patchConverter) addPatchValueToDiff(
 	path []any, v, old, newInput, oldInput any, inArray bool,
 ) error {
-	contract.Assertf(v != nil || old != nil || oldInput != nil,
-		"path: %+v  |  v: %+v  | old: %+v  |  oldInput: %+v",
-		path, v, old, oldInput)
+	contract.Assertf(v != nil || old != nil || oldInput != nil || newInput != nil,
+		"path: %+v  |  v: %+v  | old: %+v  |  oldInput: %+v  |  newInput: %+v",
+		path, v, old, oldInput, newInput)
 
 	// If there is no new input, then the only possible diff here is a delete. All other diffs must be diffs between
 	// old and new properties that are populated by the server. If there is also no old input, then there is no diff
@@ -3017,7 +3049,16 @@ func (pc *patchConverter) addPatchValueToDiff(
 	var diffKind pulumirpc.PropertyDiff_Kind
 	inputDiff := false
 	if v == nil {
-		diffKind, inputDiff = pulumirpc.PropertyDiff_DELETE, true
+		// computed values are rendered as null in the patch; handle this special case.
+		if _, ok := newInput.(resource.Computed); ok {
+			if old == nil {
+				diffKind = pulumirpc.PropertyDiff_ADD
+			} else {
+				diffKind = pulumirpc.PropertyDiff_UPDATE
+			}
+		} else {
+			diffKind, inputDiff = pulumirpc.PropertyDiff_DELETE, true
+		}
 	} else if old == nil {
 		diffKind = pulumirpc.PropertyDiff_ADD
 	} else {
@@ -3245,6 +3286,7 @@ func renderYaml(resource *unstructured.Unstructured, yamlDirectory string) error
 
 // renderPathForResource determines the appropriate YAML render path depending on the resource kind.
 func renderPathForResource(resource *unstructured.Unstructured, yamlDirectory string) string {
+	contract.Assertf(resource.GetName() != "", "expected object name to be nonempty: %v", resource)
 	crdDirectory := filepath.Join(yamlDirectory, "0-crd")
 	manifestDirectory := filepath.Join(yamlDirectory, "1-manifest")
 
@@ -3262,7 +3304,7 @@ func renderPathForResource(resource *unstructured.Unstructured, yamlDirectory st
 	filepath.Join(yamlDirectory, fileName)
 
 	var path string
-	if kinds.Kind(resource.GetKind()) == kinds.CustomResourceDefinition {
+	if kinds.KnownGroupVersions.Has(resource.GetAPIVersion()) && kinds.Kind(resource.GetKind()) == kinds.CustomResourceDefinition {
 		path = filepath.Join(crdDirectory, fileName)
 	} else {
 		path = filepath.Join(manifestDirectory, fileName)

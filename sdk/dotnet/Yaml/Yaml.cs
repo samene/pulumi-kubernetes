@@ -446,6 +446,18 @@ namespace Pulumi.Kubernetes.Yaml
                 case var t when t == typeof(Extensions.V1Beta1.ReplicaSetList):
                     groupVersionKind = "extensions/v1beta1/ReplicaSetList";
                     break;
+                case var t when t == typeof(FlowControl.V1.FlowSchema):
+                    groupVersionKind = "flowcontrol.apiserver.k8s.io/v1/FlowSchema";
+                    break;
+                case var t when t == typeof(FlowControl.V1.FlowSchemaList):
+                    groupVersionKind = "flowcontrol.apiserver.k8s.io/v1/FlowSchemaList";
+                    break;
+                case var t when t == typeof(FlowControl.V1.PriorityLevelConfiguration):
+                    groupVersionKind = "flowcontrol.apiserver.k8s.io/v1/PriorityLevelConfiguration";
+                    break;
+                case var t when t == typeof(FlowControl.V1.PriorityLevelConfigurationList):
+                    groupVersionKind = "flowcontrol.apiserver.k8s.io/v1/PriorityLevelConfigurationList";
+                    break;
                 case var t when t == typeof(FlowControl.V1Alpha1.FlowSchema):
                     groupVersionKind = "flowcontrol.apiserver.k8s.io/v1alpha1/FlowSchema";
                     break;
@@ -526,6 +538,12 @@ namespace Pulumi.Kubernetes.Yaml
                     break;
                 case var t when t == typeof(Networking.V1Alpha1.IPAddressList):
                     groupVersionKind = "networking.k8s.io/v1alpha1/IPAddressList";
+                    break;
+                case var t when t == typeof(Networking.V1Alpha1.ServiceCIDR):
+                    groupVersionKind = "networking.k8s.io/v1alpha1/ServiceCIDR";
+                    break;
+                case var t when t == typeof(Networking.V1Alpha1.ServiceCIDRList):
+                    groupVersionKind = "networking.k8s.io/v1alpha1/ServiceCIDRList";
                     break;
                 case var t when t == typeof(Networking.V1Beta1.Ingress):
                     groupVersionKind = "networking.k8s.io/v1beta1/Ingress";
@@ -755,6 +773,12 @@ namespace Pulumi.Kubernetes.Yaml
                 case var t when t == typeof(Storage.V1Alpha1.VolumeAttachmentList):
                     groupVersionKind = "storage.k8s.io/v1alpha1/VolumeAttachmentList";
                     break;
+                case var t when t == typeof(Storage.V1Alpha1.VolumeAttributesClass):
+                    groupVersionKind = "storage.k8s.io/v1alpha1/VolumeAttributesClass";
+                    break;
+                case var t when t == typeof(Storage.V1Alpha1.VolumeAttributesClassList):
+                    groupVersionKind = "storage.k8s.io/v1alpha1/VolumeAttributesClassList";
+                    break;
                 case var t when t == typeof(Storage.V1Beta1.CSIDriver):
                     groupVersionKind = "storage.k8s.io/v1beta1/CSIDriver";
                     break;
@@ -821,11 +845,82 @@ namespace Pulumi.Kubernetes.Yaml
             var id = namespaceName != null ? $"{namespaceName}/{name}" : name;
             return Resources.Apply(r => (CustomResource)r[$"{groupVersionKind}::{id}"]);
         }
+
+        internal static CustomResourceOptions GetChildOptions(Pu.Resource parent, InputList<Pu.Resource>? extraDependsOn, ComponentResourceOptions? options)
+        {
+            // Create resource options based on component resource options.
+            var dependsOn = new InputList<Pu.Resource>();
+            if (extraDependsOn is not null)
+                dependsOn.AddRange(extraDependsOn);
+            return new CustomResourceOptions
+            {
+                Parent = parent,
+                DependsOn = dependsOn,
+                Version = options?.Version,
+                PluginDownloadURL = options?.PluginDownloadURL,
+            };
+        }
+
+        internal static ComponentResourceOptions ConvertChildOptions(CustomResourceOptions options)
+        {
+            var dependsOn = new InputList<Pu.Resource>();
+            if (options is not null)
+                dependsOn.AddRange(options.DependsOn);
+            return new ComponentResourceOptions
+            {
+                Aliases = options.Aliases.ToList(),
+                DependsOn = dependsOn,
+                Parent = options.Parent,
+                ResourceTransformations = options.ResourceTransformations.ToList(),
+                Version = options.Version,
+                PluginDownloadURL = options.PluginDownloadURL,
+            };
+        }
+
+        internal static InvokeOptions GetInvokeOptions(CustomResourceOptions? options)
+        {
+            return new InvokeOptions { 
+                Parent = options?.Parent,
+                Provider = options?.Provider,
+                Version = options?.Version,
+                PluginDownloadURL = options?.PluginDownloadURL,
+            }.WithDefaults();
+        }
+
+        internal static ResourceTransformation Aliased(Pulumi.Resource parent, Pulumi.Resource? oldParent = null) {
+            return new ResourceTransformation((args) => {
+                if (!Object.ReferenceEquals(args.Options?.Parent, parent)) {
+                    return null;
+                }
+
+                var alias = new Alias { 
+                    Parent = oldParent,
+                    Name = args.Resource.GetResourceName(),
+                    Type = args.Resource.GetResourceType(),
+                };
+                if (args.Options is ComponentResourceOptions options1)
+                {
+                    var options = ComponentResourceOptions.Merge(
+                        options1,
+                        new ComponentResourceOptions { Aliases = {alias} });
+                    return new ResourceTransformationResult(args.Args, options);
+                }
+                if (args.Options is CustomResourceOptions options2)
+                {
+                    var options = CustomResourceOptions.Merge(
+                        options2,
+                        new CustomResourceOptions { Aliases = {alias} });
+                    return new ResourceTransformationResult(args.Args, options);
+                }
+                return null;
+            });
+        }
     }
 
     internal static class Parser
     {
-        public static Output<ImmutableDictionary<string, KubernetesResource>> Parse(ConfigGroupArgs config, ComponentResourceOptions? options)
+        public static Output<ImmutableDictionary<string, KubernetesResource>> Parse(ConfigGroupArgs config, CustomResourceOptions options,
+            Pulumi.Resource? aliasParent = null)
         {
             var resources = Output.Create(ImmutableDictionary.Create<string, KubernetesResource>());
 
@@ -848,28 +943,29 @@ namespace Pulumi.Kubernetes.Yaml
 
                 foreach (var file in files)
                 {
-                    var cf = new ConfigFile(
-                        file,
-                        new ConfigFileArgs
-                        {
-                            File = file,
-                            Transformations = transformations,
-                            ResourcePrefix = config.ResourcePrefix
-                        },
-                        options);
+                    var cfOptions = CollectionComponentResource.ConvertChildOptions(options);
+                    var cfArgs = new ConfigFileArgs
+                    {
+                        File = file,
+                        Transformations = transformations,
+                        ResourcePrefix = config.ResourcePrefix
+                    };
+
+                    var cf = new ConfigFile(file, cfArgs, cfOptions, aliasParent);
                     resources = Output.Tuple(resources, cf.Resources).Apply(vs => vs.Item1.AddRange(vs.Item2));
                 }
             }
 
             if (config.Yaml != null)
             {
+                var invokeOpts = CollectionComponentResource.GetInvokeOptions(options);
                 var yamlResources = config.Yaml.ToOutput().Apply(texts =>
                 {
                     var yamls = texts
                         .Select(text =>
                             ParseYamlDocument(new ParseArgs
                             {
-                                Objs = Invokes.YamlDecode(new YamlDecodeArgs { Text = text }, new InvokeOptions { Provider = options?.Provider }),
+                                Objs = Invokes.YamlDecode(new YamlDecodeArgs { Text = text }, invokeOpts),
                                 Transformations = transformations,
                                 ResourcePrefix = config.ResourcePrefix
                             }, options))
@@ -928,7 +1024,7 @@ namespace Pulumi.Kubernetes.Yaml
             => s.StartsWith("http://", StringComparison.Ordinal) || s.StartsWith("https://", StringComparison.Ordinal);
 
         internal static Output<ImmutableDictionary<string, KubernetesResource>> ParseYamlDocument(ParseArgs config,
-            ComponentResourceOptions? options = null)
+            CustomResourceOptions? options = null)
         {
             return config.Objs.ToOutput().Apply(objs =>
             {
@@ -946,21 +1042,13 @@ namespace Pulumi.Kubernetes.Yaml
         }
 
         private static Output<(string, KubernetesResource)>[] ParseYamlObject(ImmutableDictionary<string, object> obj,
-            List<TransformationAction>? transformations, string? resourcePrefix, ComponentResourceOptions? options = null)
+            List<TransformationAction>? transformations, string? resourcePrefix, CustomResourceOptions? options = null)
         {
             if (obj == null || obj.Count == 0)
                 return new Output<(string, KubernetesResource)>[0];
 
-            // Create custom resource options based on component resource options.
-            var opts = new CustomResourceOptions
-            {
-                Parent = options?.Parent,
-                DependsOn = options?.DependsOn ?? new InputList<Pu.Resource>(),
-                IgnoreChanges = options?.IgnoreChanges ?? new List<string>(),
-                Version = options?.Version,
-                Provider = options?.Provider,
-                CustomTimeouts = options?.CustomTimeouts
-            };
+            // Create a copy of options to pass into potentially mutating transforms that will be applied to this resource.
+            var opts = CustomResourceOptions.Merge(null, options);
 
             // Allow users to change API objects before any validation.
             if (transformations != null)
@@ -1057,6 +1145,8 @@ namespace Pulumi.Kubernetes.Yaml
                 || gvk == "extensions/v1beta1/NetworkPolicyList"
                 || gvk == "extensions/v1beta1/PodSecurityPolicyList"
                 || gvk == "extensions/v1beta1/ReplicaSetList"
+                || gvk == "flowcontrol.apiserver.k8s.io/v1/FlowSchemaList"
+                || gvk == "flowcontrol.apiserver.k8s.io/v1/PriorityLevelConfigurationList"
                 || gvk == "flowcontrol.apiserver.k8s.io/v1alpha1/FlowSchemaList"
                 || gvk == "flowcontrol.apiserver.k8s.io/v1alpha1/PriorityLevelConfigurationList"
                 || gvk == "flowcontrol.apiserver.k8s.io/v1beta1/FlowSchemaList"
@@ -1070,6 +1160,7 @@ namespace Pulumi.Kubernetes.Yaml
                 || gvk == "networking.k8s.io/v1/NetworkPolicyList"
                 || gvk == "networking.k8s.io/v1alpha1/ClusterCIDRList"
                 || gvk == "networking.k8s.io/v1alpha1/IPAddressList"
+                || gvk == "networking.k8s.io/v1alpha1/ServiceCIDRList"
                 || gvk == "networking.k8s.io/v1beta1/IngressClassList"
                 || gvk == "networking.k8s.io/v1beta1/IngressList"
                 || gvk == "node.k8s.io/v1/RuntimeClassList"
@@ -1108,6 +1199,7 @@ namespace Pulumi.Kubernetes.Yaml
                 || gvk == "storage.k8s.io/v1/StorageClassList"
                 || gvk == "storage.k8s.io/v1/VolumeAttachmentList"
                 || gvk == "storage.k8s.io/v1alpha1/VolumeAttachmentList"
+                || gvk == "storage.k8s.io/v1alpha1/VolumeAttributesClassList"
                 || gvk == "storage.k8s.io/v1beta1/CSIDriverList"
                 || gvk == "storage.k8s.io/v1beta1/CSINodeList"
                 || gvk == "storage.k8s.io/v1beta1/CSIStorageCapacityList"
@@ -1119,7 +1211,7 @@ namespace Pulumi.Kubernetes.Yaml
                 if (obj["items"] is IEnumerable<ImmutableDictionary<string, object>> items)
                 {
                     foreach (var item in items)
-                        objs.AddRange(Parser.ParseYamlObject(item, transformations, resourcePrefix));
+                        objs.AddRange(Parser.ParseYamlObject(item, transformations, resourcePrefix, opts));
                 }
                 return objs.ToArray();
             }
@@ -1542,6 +1634,18 @@ namespace Pulumi.Kubernetes.Yaml
                             id.Apply(id => ($"extensions/v1beta1/ReplicaSet::{id}",
                                 new Extensions.V1Beta1.ReplicaSet(id, obj!, opts) as KubernetesResource))
                         };
+                    case "flowcontrol.apiserver.k8s.io/v1/FlowSchema":
+                        return new[]
+                        {
+                            id.Apply(id => ($"flowcontrol.apiserver.k8s.io/v1/FlowSchema::{id}",
+                                new FlowControl.V1.FlowSchema(id, obj!, opts) as KubernetesResource))
+                        };
+                    case "flowcontrol.apiserver.k8s.io/v1/PriorityLevelConfiguration":
+                        return new[]
+                        {
+                            id.Apply(id => ($"flowcontrol.apiserver.k8s.io/v1/PriorityLevelConfiguration::{id}",
+                                new FlowControl.V1.PriorityLevelConfiguration(id, obj!, opts) as KubernetesResource))
+                        };
                     case "flowcontrol.apiserver.k8s.io/v1alpha1/FlowSchema":
                         return new[]
                         {
@@ -1625,6 +1729,12 @@ namespace Pulumi.Kubernetes.Yaml
                         {
                             id.Apply(id => ($"networking.k8s.io/v1alpha1/IPAddress::{id}",
                                 new Networking.V1Alpha1.IPAddress(id, obj!, opts) as KubernetesResource))
+                        };
+                    case "networking.k8s.io/v1alpha1/ServiceCIDR":
+                        return new[]
+                        {
+                            id.Apply(id => ($"networking.k8s.io/v1alpha1/ServiceCIDR::{id}",
+                                new Networking.V1Alpha1.ServiceCIDR(id, obj!, opts) as KubernetesResource))
                         };
                     case "networking.k8s.io/v1beta1/Ingress":
                         return new[]
@@ -1853,6 +1963,12 @@ namespace Pulumi.Kubernetes.Yaml
                         {
                             id.Apply(id => ($"storage.k8s.io/v1alpha1/VolumeAttachment::{id}",
                                 new Storage.V1Alpha1.VolumeAttachment(id, obj!, opts) as KubernetesResource))
+                        };
+                    case "storage.k8s.io/v1alpha1/VolumeAttributesClass":
+                        return new[]
+                        {
+                            id.Apply(id => ($"storage.k8s.io/v1alpha1/VolumeAttributesClass::{id}",
+                                new Storage.V1Alpha1.VolumeAttributesClass(id, obj!, opts) as KubernetesResource))
                         };
                     case "storage.k8s.io/v1beta1/CSIDriver":
                         return new[]

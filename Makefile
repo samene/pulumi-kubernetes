@@ -12,7 +12,7 @@ VERSION         ?= $(shell pulumictl get version)
 PROVIDER_PATH   := provider/v4
 VERSION_PATH     := ${PROVIDER_PATH}/pkg/version.Version
 
-KUBE_VERSION    ?= v1.28.0
+KUBE_VERSION    ?= v1.29.0
 SWAGGER_URL     ?= https://github.com/kubernetes/kubernetes/raw/${KUBE_VERSION}/api/openapi-spec/swagger.json
 OPENAPI_DIR     := provider/pkg/gen/openapi-specs
 OPENAPI_FILE    := ${OPENAPI_DIR}/swagger-${KUBE_VERSION}.json
@@ -23,7 +23,6 @@ JAVA_GEN		 := pulumi-java-gen
 JAVA_GEN_VERSION := v0.8.0
 
 WORKING_DIR     := $(shell pwd)
-TESTPARALLELISM := 4
 
 openapi_file::
 	@mkdir -p $(OPENAPI_DIR)
@@ -50,10 +49,14 @@ k8sprovider::
 	(cd provider && CGO_ENABLED=0 go build -o $(WORKING_DIR)/bin/${PROVIDER} -ldflags "-X ${PROJECT}/${VERSION_PATH}=${VERSION}" $(PROJECT)/${PROVIDER_PATH}/cmd/$(PROVIDER))
 
 k8sprovider_debug::
+	$(WORKING_DIR)/bin/${CODEGEN} kinds $(SCHEMA_FILE) $(CURDIR)
+	@[ ! -f "provider/cmd/${PROVIDER}/schema.go" ] || \
+		(echo "\n    Please remove provider/cmd/${PROVIDER}/schema.go, which is no longer used\n" && false)
+	(cd provider && VERSION=${VERSION} go generate cmd/${PROVIDER}/main.go)
 	(cd provider && CGO_ENABLED=0 go build -o $(WORKING_DIR)/bin/${PROVIDER} -gcflags="all=-N -l" -ldflags "-X ${PROJECT}/${VERSION_PATH}=${VERSION}" $(PROJECT)/${PROVIDER_PATH}/cmd/$(PROVIDER))
 
 test_provider::
-	cd provider/pkg && go test -short -v -count=1 -coverprofile="coverage.txt" -coverpkg=./... -timeout 2h -parallel ${TESTPARALLELISM} ./...
+	cd provider/pkg && go test -short -v -coverprofile="coverage.txt" -coverpkg=./... -timeout 2h ./...
 
 dotnet_sdk:: DOTNET_VERSION := $(shell pulumictl get version --language dotnet)
 dotnet_sdk::
@@ -106,8 +109,8 @@ build:: k8sgen openapi_file schema k8sprovider nodejs_sdk go_sdk python_sdk dotn
 only_build:: build
 
 lint::
-	for DIR in "provider" "sdk" "tests" ; do \
-		pushd $$DIR && golangci-lint run -c ../.golangci.yml --timeout 10m && popd ; \
+	@for DIR in "provider" "tests" ; do \
+		pushd $$DIR  > /dev/null; golangci-lint run -c ../.golangci.yml --timeout 10m; popd  > /dev/null; \
 	done
 
 install_provider::
@@ -115,8 +118,8 @@ install_provider::
 
 install:: install_nodejs_sdk install_dotnet_sdk install_provider
 
-GO_TEST_FAST := go test -short -v -count=1 -cover -timeout 2h -parallel ${TESTPARALLELISM}
-GO_TEST		 := go test -v -count=1 -cover -timeout 2h -parallel ${TESTPARALLELISM}
+GO_TEST_FAST := go test -short -v -cover -timeout 2h
+GO_TEST		 := go test -v -cover -timeout 2h
 
 # Required for the codegen action that runs in pulumi/pulumi
 test:: test_all
@@ -138,6 +141,7 @@ test_all::
 	cd tests/sdk/dotnet && $(GO_TEST) ./...
 	cd tests/sdk/go && $(GO_TEST) ./...
 	cd tests/convert && $(GO_TEST) ./...
+	cd tests/provider && $(GO_TEST) ./...
 
 generate_schema:: schema
 

@@ -63,12 +63,6 @@ var helmV3ChartResource = pschema.ResourceSpec{
 				},
 				Description: "Resources created by the Chart.",
 			},
-			"urn": {
-				TypeSpec: pschema.TypeSpec{
-					Type: "string",
-				},
-				Description: "The stable logical URN used to distinctly address a resource, both before and after deployments.",
-			},
 		},
 		Type: "object",
 	},
@@ -1067,6 +1061,52 @@ var yamlConfigFileResource = pschema.ResourceSpec{
 	},
 }
 
+//go:embed examples/overlays/configFileV2.md
+var configFileV2MD string
+
+var yamlConfigFileV2Resource = pschema.ResourceSpec{
+	IsComponent: true,
+	ObjectTypeSpec: pschema.ObjectTypeSpec{
+		IsOverlay:   false,
+		Description: configFileV2MD,
+		Properties: map[string]pschema.PropertySpec{
+			"resources": {
+				TypeSpec: pschema.TypeSpec{
+					Type: "array",
+					Items: &pschema.TypeSpec{
+						Ref: "pulumi.json#/Any",
+					},
+				},
+				Description: "Resources created by the ConfigFile.",
+			},
+		},
+		Type: "object",
+	},
+	InputProperties: map[string]pschema.PropertySpec{
+		"file": {
+			TypeSpec: pschema.TypeSpec{
+				Type: "string",
+			},
+			Description: "Path or URL to a Kubernetes manifest file. File must exist.",
+		},
+		"resourcePrefix": {
+			TypeSpec: pschema.TypeSpec{
+				Type: "string",
+			},
+			Description: "A prefix for the auto-generated resource names. Defaults to the name of the ConfigFile. Example: A resource created with resourcePrefix=\"foo\" would produce a resource named \"foo-resourceName\".",
+		},
+		"skipAwait": {
+			TypeSpec: pschema.TypeSpec{
+				Type: "boolean",
+			},
+			Description: "Indicates that child resources should skip the await logic.",
+		},
+	},
+	RequiredInputs: []string{
+		"file",
+	},
+}
+
 //go:embed examples/overlays/configGroup.md
 var configGroupMD string
 
@@ -1148,6 +1188,67 @@ var yamlConfigGroupResource = pschema.ResourceSpec{
 				},
 			},
 			Description: "YAML text containing Kubernetes resource definitions.",
+		},
+	},
+}
+
+//go:embed examples/overlays/configGroupV2.md
+var configGroupV2MD string
+
+var yamlConfigGroupV2Resource = pschema.ResourceSpec{
+	IsComponent: true,
+	ObjectTypeSpec: pschema.ObjectTypeSpec{
+		IsOverlay:   false,
+		Description: configGroupV2MD,
+		Properties: map[string]pschema.PropertySpec{
+			"resources": {
+				TypeSpec: pschema.TypeSpec{
+					Type: "array",
+					Items: &pschema.TypeSpec{
+						Ref: "pulumi.json#/Any",
+					},
+				},
+				Description: "Resources created by the ConfigGroup.",
+			},
+		},
+		Type: "object",
+	},
+	InputProperties: map[string]pschema.PropertySpec{
+		"files": {
+			TypeSpec: pschema.TypeSpec{
+				Type: "array",
+				Items: &pschema.TypeSpec{
+					Type: "string",
+				},
+			},
+			Description: "Set of paths and/or URLs to Kubernetes manifest files. Supports glob patterns.",
+		},
+		"objs": {
+			TypeSpec: pschema.TypeSpec{
+				Type: "array",
+				Items: &pschema.TypeSpec{
+					Ref: "pulumi.json#/Any",
+				},
+			},
+			Description: "Objects representing Kubernetes resource configurations.",
+		},
+		"resourcePrefix": {
+			TypeSpec: pschema.TypeSpec{
+				Type: "string",
+			},
+			Description: "A prefix for the auto-generated resource names. Defaults to the name of the ConfigGroup. Example: A resource created with resourcePrefix=\"foo\" would produce a resource named \"foo-resourceName\".",
+		},
+		"skipAwait": {
+			TypeSpec: pschema.TypeSpec{
+				Type: "boolean",
+			},
+			Description: "Indicates that child resources should skip the await logic.",
+		},
+		"yaml": {
+			TypeSpec: pschema.TypeSpec{
+				Type: "string",
+			},
+			Description: "A Kubernetes YAML manifest containing Kubernetes resource configuration(s).",
 		},
 	},
 }
@@ -1297,5 +1398,7 @@ func init() {
 	resourceOverlays["kubernetes:helm.sh/v3:Release"] = helmV3ReleaseResource
 	resourceOverlays["kubernetes:kustomize:Directory"] = kustomizeDirectoryResource
 	resourceOverlays["kubernetes:yaml:ConfigFile"] = yamlConfigFileResource
+	resourceOverlays["kubernetes:yaml/v2:ConfigFile"] = yamlConfigFileV2Resource
 	resourceOverlays["kubernetes:yaml:ConfigGroup"] = yamlConfigGroupResource
+	resourceOverlays["kubernetes:yaml/v2:ConfigGroup"] = yamlConfigGroupV2Resource
 }

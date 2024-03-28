@@ -18,6 +18,7 @@ package test
 import (
 	b64 "encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -29,13 +30,21 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/format"
+	. "github.com/onsi/gomega/gstruct"
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/openapi"
 	"github.com/pulumi/pulumi-kubernetes/tests/v4"
+	. "github.com/pulumi/pulumi-kubernetes/tests/v4/gomega"
+	pulumirpctesting "github.com/pulumi/pulumi-kubernetes/tests/v4/pulumirpc"
+	"github.com/pulumi/pulumi/pkg/v3/engine"
 	"github.com/pulumi/pulumi/pkg/v3/resource/deploy/providers"
 	"github.com/pulumi/pulumi/pkg/v3/testing/integration"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/fsutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -47,6 +56,9 @@ var baseOptions = &integration.ProgramTestOptions{
 	Verbose: true,
 	Dependencies: []string{
 		"@pulumi/kubernetes",
+	},
+	PostPrepareProject: func(p *engine.Projinfo) error {
+		return fsutil.CopyFile(filepath.Join(p.Root, "testdata"), filepath.Join("..", "..", "testdata"), nil)
 	},
 	Env: []string{
 		"PULUMI_K8S_CLIENT_BURST=200",
@@ -100,6 +112,7 @@ func TestAutonaming(t *testing.T) {
 	var step1Name any
 	var step2Name any
 	var step3Name any
+	var step4Name any
 
 	test := baseOptions.With(integration.ProgramTestOptions{
 		Dir:   filepath.Join("autonaming", "step1"),
@@ -205,6 +218,36 @@ func TestAutonaming(t *testing.T) {
 					assert.True(t, providers.IsProviderType(provRes.URN.Type()))
 
 					//
+					// Assert Pod was NOT replaced, and has the same name, previously allocated by Pulumi.
+					//
+
+					pod := stackInfo.Deployment.Resources[1]
+					assert.Equal(t, "autonaming-test", string(pod.URN.Name()))
+					step4Name, _ = openapi.Pluck(pod.Outputs, "metadata", "name")
+					assert.True(t, strings.HasPrefix(step4Name.(string), "autonaming-test-"))
+
+					autonamed, _ := openapi.Pluck(pod.Outputs, "metadata", "annotations", "pulumi.com/autonamed")
+					assert.Equal(t, "true", autonamed)
+
+					assert.Equal(t, step3Name, step4Name)
+				},
+			},
+			{
+				Dir:      filepath.Join("autonaming", "step5"),
+				Additive: true,
+				ExtraRuntimeValidation: func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
+					assert.NotNil(t, stackInfo.Deployment)
+					assert.Equal(t, 4, len(stackInfo.Deployment.Resources))
+
+					tests.SortResourcesByURN(stackInfo)
+
+					stackRes := stackInfo.Deployment.Resources[3]
+					assert.Equal(t, resource.RootStackType, stackRes.URN.Type())
+
+					provRes := stackInfo.Deployment.Resources[2]
+					assert.True(t, providers.IsProviderType(provRes.URN.Type()))
+
+					//
 					// User has specified their own name for the Pod, so we replace it, and Pulumi does NOT
 					// allocate a name on its own.
 					//
@@ -221,6 +264,138 @@ func TestAutonaming(t *testing.T) {
 		},
 	})
 	integration.ProgramTest(t, &test)
+}
+
+func TestGenerateName(t *testing.T) {
+	var pt *integration.ProgramTester
+	var step1Name any
+	var step2Name any
+	var step3Name any
+	var step4Name any
+	var step5Name any
+	var step6Name any
+
+	test := baseOptions.With(integration.ProgramTestOptions{
+		Dir:                  filepath.Join("generatename", "step1"),
+		Quick:                false,
+		SkipRefresh:          false,
+		ExpectRefreshChanges: false,
+		ExtraRuntimeValidation: func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
+			assert.NotNil(t, stackInfo.Deployment)
+
+			//
+			// Assert pod is successfully given a unique name by Kubernetes.
+			//
+			pod := tests.SearchResourcesByName(stackInfo, "", "kubernetes:core/v1:Pod", "generatename-test")
+			step1Name, _ = openapi.Pluck(pod.Outputs, "metadata", "name")
+			assert.True(t, strings.HasPrefix(step1Name.(string), "generatename-test-"))
+			generateName, _ := openapi.Pluck(pod.Outputs, "metadata", "generateName")
+			assert.Equal(t, "generatename-test-", generateName.(string))
+			_, autonamed := openapi.Pluck(pod.Outputs, "metadata", "annotations", "pulumi.com/autonamed")
+			assert.False(t, autonamed)
+		},
+		Config: map[string]string{},
+
+		EditDirs: []integration.EditDir{
+			{
+				Dir:      filepath.Join("generatename", "step2"),
+				Additive: true,
+				ExtraRuntimeValidation: func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
+					assert.NotNil(t, stackInfo.Deployment)
+
+					//
+					// Assert pod was NOT replaced, and has the same name, previously allocated by Kubernetes.
+					//
+					pod := tests.SearchResourcesByName(stackInfo, "", "kubernetes:core/v1:Pod", "generatename-test")
+					step2Name, _ = openapi.Pluck(pod.Outputs, "metadata", "name")
+					assert.Equal(t, step1Name, step2Name)
+					generateName, _ := openapi.Pluck(pod.Outputs, "metadata", "generateName")
+					assert.Equal(t, "generatename-test-modified-", generateName.(string))
+					_, autonamed := openapi.Pluck(pod.Outputs, "metadata", "annotations", "pulumi.com/autonamed")
+					assert.False(t, autonamed)
+				},
+			},
+			{
+				Dir:      filepath.Join("generatename", "step3"),
+				Additive: true,
+				ExtraRuntimeValidation: func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
+					assert.NotNil(t, stackInfo.Deployment)
+
+					//
+					// Assert pod was replaced, i.e., destroyed and re-created, with allocating a new name.
+					//
+					pod := tests.SearchResourcesByName(stackInfo, "", "kubernetes:core/v1:Pod", "generatename-test")
+					step3Name, _ = openapi.Pluck(pod.Outputs, "metadata", "name")
+					assert.NotEqual(t, step2Name, step3Name)
+					assert.True(t, strings.HasPrefix(step3Name.(string), "generatename-test-modified-"))
+					_, autonamed := openapi.Pluck(pod.Outputs, "metadata", "annotations", "pulumi.com/autonamed")
+					assert.False(t, autonamed)
+				},
+			},
+			{
+				Dir:      filepath.Join("generatename", "step4"),
+				Additive: true,
+				ExtraRuntimeValidation: func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
+					assert.NotNil(t, stackInfo.Deployment)
+
+					//
+					// Assert pod was NOT replaced, and has the same name, previously allocated by Kubernetes.
+					//
+					pod := tests.SearchResourcesByName(stackInfo, "", "kubernetes:core/v1:Pod", "generatename-test")
+					step4Name, _ = openapi.Pluck(pod.Outputs, "metadata", "name")
+					assert.Equal(t, step3Name, step4Name)
+					_, autonamed := openapi.Pluck(pod.Outputs, "metadata", "annotations", "pulumi.com/autonamed")
+					assert.False(t, autonamed)
+
+					// Update the configuration for subsequent steps.
+					require.NoError(t,
+						pt.RunPulumiCommand("config", "set", "podName", step4Name.(string)),
+						"failed to set podName config")
+				},
+			},
+			{
+				Dir:             filepath.Join("generatename", "step5"),
+				Additive:        true,
+				ExpectNoChanges: true,
+				ExtraRuntimeValidation: func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
+					assert.NotNil(t, stackInfo.Deployment)
+
+					//
+					// User has explicitly set the name to the previously-generated name (maybe for clarity),
+					// and Pulumi does NOT replace the pod.
+					//
+					pod := tests.SearchResourcesByName(stackInfo, "", "kubernetes:core/v1:Pod", "generatename-test")
+					step5Name, _ = openapi.Pluck(pod.Outputs, "metadata", "name")
+					assert.Equal(t, step4Name, step5Name)
+					_, autonamed := openapi.Pluck(pod.Outputs, "metadata", "annotations", "pulumi.com/autonamed")
+					assert.False(t, autonamed)
+				},
+			},
+			{
+				Dir:      filepath.Join("generatename", "step6"),
+				Additive: true,
+				ExtraRuntimeValidation: func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
+					assert.NotNil(t, stackInfo.Deployment)
+
+					//
+					// User has specified their own name for the Pod, so we replace it, and Pulumi/Kubernetes does NOT
+					// allocate a name on its own.
+					//
+					pod := tests.SearchResourcesByName(stackInfo, "", "kubernetes:core/v1:Pod", "generatename-test")
+					step6Name, _ = openapi.Pluck(pod.Outputs, "metadata", "name")
+					assert.NotEqual(t, step5Name, step6Name)
+					assert.Equal(t, "generatename-test", step6Name.(string))
+					_, autonamed := openapi.Pluck(pod.Outputs, "metadata", "annotations", "pulumi.com/autonamed")
+					assert.False(t, autonamed)
+				},
+			},
+		},
+	})
+	pt = integration.ProgramTestManualLifeCycle(t, &test)
+	err := pt.TestLifeCycleInitAndDestroy()
+	if !errors.Is(err, integration.ErrTestFailed) {
+		assert.NoError(t, err)
+	}
 }
 
 func TestCRDs(t *testing.T) {
@@ -278,6 +453,19 @@ func TestCRDs(t *testing.T) {
 }
 
 func TestPod(t *testing.T) {
+	getCondition := func(conditions []any, conditionType string) map[string]any {
+		// Order of conditions is not guaranteed, so we need to search for the condition of the given type.
+		for _, condition := range conditions {
+			conditionMap, ok := condition.(map[string]any)
+			require.True(t, ok, "condition items should be maps")
+			if conditionMap["type"] == conditionType {
+				return conditionMap
+			}
+		}
+		t.Fatalf("condition of type %s not found", conditionType)
+		return nil
+	}
+
 	test := baseOptions.With(integration.ProgramTestOptions{
 		Dir:   filepath.Join("delete-before-replace", "step1"),
 		Quick: true,
@@ -311,9 +499,7 @@ func TestPod(t *testing.T) {
 
 			// Status "Ready" is "True".
 			conditions, _ := openapi.Pluck(pod.Outputs, "status", "conditions")
-			ready := conditions.([]any)[1].(map[string]any)
-			readyType := ready["type"]
-			assert.Equal(t, "Ready", readyType)
+			ready := getCondition(conditions.([]any), "Ready")
 			readyStatus := ready["status"]
 			assert.Equal(t, "True", readyStatus)
 
@@ -364,9 +550,7 @@ func TestPod(t *testing.T) {
 
 					// Status "Ready" is "True".
 					conditions, _ := openapi.Pluck(pod.Outputs, "status", "conditions")
-					ready := conditions.([]any)[1].(map[string]any)
-					readyType := ready["type"]
-					assert.Equal(t, "Ready", readyType)
+					ready := getCondition(conditions.([]any), "Ready")
 					readyStatus := ready["status"]
 					assert.Equal(t, "True", readyStatus)
 
@@ -424,6 +608,38 @@ func TestDeploymentRollout(t *testing.T) {
 		EditDirs: []integration.EditDir{
 			{
 				Dir:      filepath.Join("deployment-rollout", "step2"),
+				Additive: true,
+				ExtraRuntimeValidation: func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
+					assert.NotNil(t, stackInfo.Deployment)
+					assert.Equal(t, 4, len(stackInfo.Deployment.Resources))
+
+					tests.SortResourcesByURN(stackInfo)
+
+					appsv1Deploy := stackInfo.Deployment.Resources[0]
+					namespace := stackInfo.Deployment.Resources[1]
+					provRes := stackInfo.Deployment.Resources[2]
+					stackRes := stackInfo.Deployment.Resources[3]
+
+					assert.Equal(t, resource.RootStackType, stackRes.URN.Type())
+					assert.True(t, providers.IsProviderType(provRes.URN.Type()))
+
+					assert.Equal(t, tokens.Type("kubernetes:core/v1:Namespace"), namespace.URN.Type())
+
+					//
+					// Assert deployment is updated successfully.
+					//
+
+					name, _ := openapi.Pluck(appsv1Deploy.Outputs, "metadata", "name")
+					assert.True(t, strings.Contains(name.(string), "nginx"))
+					containers, _ := openapi.Pluck(appsv1Deploy.Outputs, "spec", "template", "spec", "containers")
+					containerStatus := containers.([]any)[0].(map[string]any)
+					image := containerStatus["image"]
+					assert.Equal(t, image.(string), "nginx:stable")
+				},
+			},
+			{
+				// This is a deployment spec update that causes a no-op replica set update.
+				Dir:      filepath.Join("deployment-rollout", "step3"),
 				Additive: true,
 				ExtraRuntimeValidation: func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
 					assert.NotNil(t, stackInfo.Deployment)
@@ -587,6 +803,7 @@ func TestGet(t *testing.T) {
 }
 
 func TestIstio(t *testing.T) {
+	tests.SkipIfShort(t, "test provisions a load balancer and requires a cloud provider cluster to run")
 	test := baseOptions.With(integration.ProgramTestOptions{
 		Dir:         filepath.Join("istio", "step1"),
 		Quick:       true,
@@ -946,6 +1163,7 @@ func TestRenderYAML(t *testing.T) {
 			assert.Equal(t, len(files), 2)
 		},
 	})
+
 	integration.ProgramTest(t, &test)
 }
 
@@ -1129,6 +1347,42 @@ func TestSecrets(t *testing.T) {
 				},
 			},
 		},
+	})
+	integration.ProgramTest(t, &test)
+}
+
+// TestSecretDataNewLine tests that secrets with new lines in the base64 encoding are handled correctly.
+// See: https://github.com/pulumi/pulumi-kubernetes/issues/2681
+func TestSecretDataNewLine(t *testing.T) {
+	test := baseOptions.With(integration.ProgramTestOptions{
+		Dir:                  "secrets-new-line",
+		ExpectRefreshChanges: false,
+		SkipRefresh:          false,
+		OrderedConfig: []integration.ConfigValue{
+			{
+				Key:   "pulumi:disable-default-providers[0]",
+				Value: "kubernetes",
+				Path:  true,
+			},
+		},
+		ExtraRuntimeValidation: func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
+			assert.NotNil(t, stackInfo.Deployment)
+
+			data, ok := stackInfo.Outputs["data"]
+			assert.Truef(t, ok, "missing expected output \"data\"")
+
+			stringData, ok := stackInfo.Outputs["stringData"]
+			assert.Falsef(t, ok, "unexpected non-empty output: \"stringData\"")
+
+			assert.NotEmptyf(t, data, "data field is empty")
+			assert.Emptyf(t, stringData, "stringData field is not empty")
+
+		},
+		EditDirs: []integration.EditDir{{
+			Dir:             "secrets-new-line",
+			ExpectNoChanges: true, // Re-running the same program should not cause any changes.
+			Additive:        true,
+		}},
 	})
 	integration.ProgramTest(t, &test)
 }
@@ -1956,8 +2210,7 @@ func ignoreChageTest(t *testing.T, testFolderName string) {
 // and has a controller backing it. We create 2 pods to test egress between them, rather than hitting
 // a live URL, to avoid flakiness.
 func TestEmptyItemNormalization(t *testing.T) {
-	tests.SkipIfShort(t)
-
+	tests.SkipIfShort(t, "test requires a cluster with NetworkPolicy support")
 	validateProgram := func(networkingEnabled bool) func(*testing.T, integration.RuntimeValidationStackInfo) {
 		return func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
 			ns, ok := stackInfo.Outputs["podANamespace"].(string)
@@ -2029,14 +2282,14 @@ func TestFieldManagerPatchResources(t *testing.T) {
 		_, err := tests.Kubectl("create namespace", ns)
 		require.NoError(t, err)
 		t.Cleanup(func() {
-			tests.Kubectl("delete namespace", ns)
+			_, _ = tests.Kubectl("delete namespace", ns)
 		})
 
 		// Create nginx deployment.
 		_, err = tests.Kubectl("apply -f", filepath.Join(testFolder, "deployment.yaml"), "-n", ns)
 		require.NoError(t, err)
 		t.Cleanup(func() {
-			tests.Kubectl("delete namespace", ns)
+			_, _ = tests.Kubectl("delete namespace", ns)
 		})
 
 		return ns
@@ -2082,10 +2335,478 @@ func TestFieldManagerPatchResources(t *testing.T) {
 					depReplicas, err := tests.Kubectl("get deployment -o=jsonpath={.spec.replicas} -n", namespace, "test-mgr-nginx")
 					assert.NoError(t, err)
 					assert.Equal(t, "2", string(depReplicas))
+
+					// Ensure that we don't inadvertently share ownership of nested fields that we specify in ignoreChanges.
+					// See: https://github.com/pulumi/pulumi-kubernetes/issues/2714.
+					liveObj, err := tests.Kubectl("get deployment -o yaml --show-managed-fields -n", namespace, "test-mgr-nginx")
+					assert.NoError(t, err)
+					wantString := ` - apiVersion: apps/v1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:metadata:
+        f:annotations:
+          f:pulumi.com/patchForce: {}
+      f:spec:
+        f:template:
+          f:spec:
+            f:containers:
+              k:{"name":"nginx"}:
+                .: {}
+                f:image: {}
+                f:name: {}
+    manager: pulumi-kubernetes-`
+					assert.Contains(t, string(liveObj), wantString)
 				},
 			},
 		},
 	})
 
 	integration.ProgramTest(t, &test)
+}
+
+// TestOptionPropagation tests the handling of resource options by the various compoonent resources.
+// Component resources are responsible for implementing option propagation logic when creating
+// child resources.
+func TestOptionPropagation(t *testing.T) {
+	g := NewWithT(t)
+	format.MaxLength = 0
+	format.MaxDepth = 5
+	format.RegisterCustomFormatter(pulumirpctesting.FormatDebugInterceptorLog)
+
+	cwd, err := os.Getwd()
+	if !assert.NoError(t, err) {
+		t.FailNow()
+	}
+
+	grpcLog, err := pulumirpctesting.NewDebugInterceptorLog(t)
+	require.NoError(t, err)
+
+	options := baseOptions.With(integration.ProgramTestOptions{
+		Dir:                  filepath.Join(cwd, "options"),
+		Env:                  []string{grpcLog.Env()},
+		Quick:                true,
+		ExpectRefreshChanges: false,
+		ExtraRuntimeValidation: func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
+
+			// lookup some resources for later use
+			providerA := tests.SearchResourcesByName(stackInfo, "", "pulumi:providers:kubernetes", "a")
+			require.NotNil(t, providerA)
+			providerB := tests.SearchResourcesByName(stackInfo, "", "pulumi:providers:kubernetes", "b")
+			require.NotNil(t, providerB)
+			providerNullOpts := tests.SearchResourcesByName(stackInfo, "", "pulumi:providers:kubernetes", "nullopts")
+			require.NotNil(t, providerNullOpts)
+			sleep := tests.SearchResourcesByName(stackInfo, "", "time:index/sleep:Sleep", "sleep")
+			require.NotNil(t, sleep)
+
+			// some helper functions for naming purposes
+			providerUrn := func(prov *apitype.ResourceV3) resource.URN {
+				return prov.URN + resource.URNNameDelimiter + resource.URN(prov.ID)
+			}
+			urn := func(parentType, baseType tokens.Type, name string) resource.URN {
+				return resource.NewURN(stackInfo.StackName, "options-test", parentType, baseType, name)
+			}
+
+			// read the GRPC log file to inspect the RegisterResource calls, since they provide
+			// the most detailed view of the resource's options as determined by the SDK.
+			logEntries, err := grpcLog.ReadAll()
+			require.NoError(t, err)
+			rr := logEntries.ListRegisterResource()
+			invokes := logEntries.Invokes()
+
+			// Verify that the invokes for provider A contain version info across-the-board.
+			// The Version and PluginDownloadURL options normally serve as hints when selecting
+			// a default provider, and should be propagated. For testing purposes, we set the provider explicitly to avoid
+			// any attempt to use the fake version/url.
+			g.Expect(invokes.ByProvider(providerUrn(providerA))).To(HaveEach(
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Version": Equal("1.2.3"),
+						// bug: https://github.com/pulumi/pulumi/issues/14839
+						// "PluginDownloadURL": Equal("https://a.pulumi.test"),
+					}),
+				}),
+			))
+
+			// --- ConfigGroup ---
+
+			// ConfigGroup "cg-options" with most options
+			g.Expect(rr.Named(stackInfo.RootResource.URN,
+				"kubernetes:yaml:ConfigGroup", "cg-options")).To(HaveExactElements(
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Aliases":           HaveExactElements(Alias("cg-options-old"), Alias("cg-options-aliased")),
+						"Protect":           BeTrue(),
+						"Dependencies":      HaveExactElements(string(sleep.URN)),
+						"Provider":          BeEmpty(),
+						"Version":           Equal("1.2.3"),
+						"PluginDownloadURL": Equal("https://a.pulumi.test"),
+						"Providers": MatchAllKeys(Keys{
+							"kubernetes": BeEquivalentTo(providerUrn(providerA)),
+						}),
+						"IgnoreChanges": HaveExactElements("ignored"),
+					}),
+				}),
+			))
+			g.Expect(rr.Named(urn("", "kubernetes:yaml:ConfigGroup", "cg-options"),
+				"kubernetes:core/v1:ConfigMap", "cg-options-cg-options-cm-1")).To(HaveExactElements(
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Aliases":           HaveExactElements(Alias("cg-options-cm-1-k8s-aliased"), Alias("cg-options-cg-options-cm-1-aliased")),
+						"Protect":           BeTrue(),
+						"Dependencies":      BeEmpty(),
+						"Provider":          BeEquivalentTo(providerUrn(providerA)),
+						"Version":           Equal("1.2.3"),
+						"PluginDownloadURL": Equal("https://a.pulumi.test"),
+						"Providers":         BeEmpty(),
+						"IgnoreChanges":     BeEmpty(),
+						"Object": PointTo(ProtobufStruct(MatchKeys(IgnoreExtras, Keys{
+							"metadata": MatchKeys(IgnoreExtras, Keys{
+								"name":        Equal("cg-options-cm-1"),
+								"annotations": And(HaveKey("pulumi.com/skipAwait"), HaveKey("transformed")),
+							}),
+						}))),
+					}),
+				}),
+			))
+			g.Expect(rr.Named(urn("", "kubernetes:yaml:ConfigGroup", "cg-options"),
+				"kubernetes:yaml:ConfigFile", "cg-options-./testdata/options/configgroup/manifest.yaml")).To(HaveExactElements(
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Aliases":           HaveExactElements(Alias("cg-options-./testdata/options/configgroup/manifest.yaml-aliased")),
+						"Protect":           BeTrue(),
+						"Dependencies":      BeEmpty(),
+						"Provider":          BeEmpty(),
+						"Version":           Equal("1.2.3"),
+						"PluginDownloadURL": Equal("https://a.pulumi.test"),
+						"IgnoreChanges":     BeEmpty(),
+					}),
+				}),
+			))
+			g.Expect(rr.Named(urn("kubernetes:yaml:ConfigGroup", "kubernetes:yaml:ConfigFile", "cg-options-./testdata/options/configgroup/manifest.yaml"),
+				"kubernetes:core/v1:ConfigMap", "cg-options-configgroup-cm-1")).To(HaveExactElements(
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Aliases":           HaveExactElements(Alias("configgroup-cm-1-k8s-aliased"), Alias("cg-options-configgroup-cm-1-aliased")),
+						"Protect":           BeTrue(),
+						"Dependencies":      BeEmpty(),
+						"Provider":          BeEquivalentTo(providerUrn(providerA)),
+						"Version":           Equal("1.2.3"),
+						"PluginDownloadURL": Equal("https://a.pulumi.test"),
+						"Providers":         BeEmpty(),
+						"IgnoreChanges":     BeEmpty(),
+						"Object": PointTo(ProtobufStruct(MatchKeys(IgnoreExtras, Keys{
+							"metadata": MatchKeys(IgnoreExtras, Keys{
+								"name":        Equal("configgroup-cm-1"),
+								"annotations": And(HaveKey("pulumi.com/skipAwait"), HaveKey("transformed")),
+							}),
+						}))),
+					}),
+				}),
+			))
+
+			// ConfigGroup "cg-provider" with "provider" option that should propagate to children.
+			g.Expect(rr.Named(stackInfo.RootResource.URN,
+				"kubernetes:yaml:ConfigGroup", "cg-provider")).To(HaveExactElements(
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Provider": BeEmpty(),
+						"Version":  BeEmpty(),
+						"Providers": MatchAllKeys(Keys{
+							"kubernetes": BeEquivalentTo(providerUrn(providerB)),
+						}),
+					}),
+				}),
+			))
+
+			// ConfigGroup "cg-nullopts" with a stack transform to apply a "provider" option.
+			g.Expect(rr.Named(stackInfo.RootResource.URN,
+				"kubernetes:yaml:ConfigGroup", "cg-nullopts")).To(HaveExactElements(
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Provider": BeEmpty(),
+						"Version":  BeEmpty(),
+						"Providers": MatchAllKeys(Keys{
+							"kubernetes": BeEquivalentTo(providerUrn(providerNullOpts)),
+						}),
+					}),
+				}),
+			))
+
+			// --- ConfigFile ---
+
+			// ConfigFile "cf-options" with most options
+			g.Expect(rr.Named(stackInfo.RootResource.URN,
+				"kubernetes:yaml:ConfigFile", "cf-options-cf-options")).To(HaveExactElements(
+				// quirk: NodeJS SDK applies resource_prefix ("cf-options") to the component itself.
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Aliases":           HaveExactElements(Alias("cf-options-old"), Alias("cf-options-cf-options-aliased")),
+						"Protect":           BeTrue(),
+						"Dependencies":      HaveExactElements(string(sleep.URN)),
+						"Provider":          BeEmpty(),
+						"Version":           Equal("1.2.3"),
+						"PluginDownloadURL": Equal("https://a.pulumi.test"),
+						"Providers": MatchAllKeys(Keys{
+							"kubernetes": BeEquivalentTo(providerUrn(providerA)),
+						}),
+						"IgnoreChanges": HaveExactElements("ignored"),
+					}),
+				}),
+			))
+			g.Expect(rr.Named(urn("", "kubernetes:yaml:ConfigFile", "cf-options-cf-options"),
+				"kubernetes:core/v1:ConfigMap", "cf-options-configfile-cm-1")).To(HaveExactElements(
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Aliases":           HaveExactElements(Alias("configfile-cm-1-k8s-aliased"), Alias("cf-options-configfile-cm-1-aliased")),
+						"Protect":           BeTrue(),
+						"Dependencies":      BeEmpty(),
+						"Provider":          BeEquivalentTo(providerUrn(providerA)),
+						"Version":           Equal("1.2.3"),
+						"PluginDownloadURL": Equal("https://a.pulumi.test"),
+						"Providers":         BeEmpty(),
+						"IgnoreChanges":     BeEmpty(),
+						"Object": PointTo(ProtobufStruct(MatchKeys(IgnoreExtras, Keys{
+							"metadata": MatchKeys(IgnoreExtras, Keys{
+								"name":        Equal("configfile-cm-1"),
+								"annotations": And(HaveKey("pulumi.com/skipAwait"), HaveKey("transformed")),
+							}),
+						}))),
+					}),
+				}),
+			))
+
+			// ConfigFile "cf-provider" with "provider" option that should propagate to children.
+			g.Expect(rr.Named(stackInfo.RootResource.URN,
+				"kubernetes:yaml:ConfigFile", "cf-provider-cf-provider")).To(HaveExactElements(
+				// quirk: NodeJS SDK applies resource_prefix ("cf-provider") to the component itself.
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Provider": BeEmpty(),
+						"Version":  BeEmpty(),
+						"Providers": MatchAllKeys(Keys{
+							"kubernetes": BeEquivalentTo(providerUrn(providerB)),
+						}),
+					}),
+				}),
+			))
+			g.Expect(rr.Named(urn("", "kubernetes:yaml:ConfigFile", "cf-provider-cf-provider"),
+				"kubernetes:core/v1:ConfigMap", "cf-provider-configfile-cm-1")).To(HaveExactElements(
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Provider":  BeEquivalentTo(providerUrn(providerB)),
+						"Version":   Not(BeEmpty()),
+						"Providers": BeEmpty(),
+						"Object": PointTo(ProtobufStruct(MatchKeys(IgnoreExtras, Keys{
+							"metadata": MatchKeys(IgnoreExtras, Keys{
+								"name": Equal("configfile-cm-1"),
+							}),
+						}))),
+					}),
+				}),
+			))
+
+			// ConfigFile "cf-nullopts" with a stack transform to apply a "provider" option.
+			g.Expect(rr.Named(stackInfo.RootResource.URN,
+				"kubernetes:yaml:ConfigFile", "cf-nullopts-cf-nullopts")).To(HaveExactElements(
+				// quirk: NodeJS SDK applies resource_prefix ("cf-nullopts") to the component itself.
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Provider": BeEmpty(),
+						"Version":  BeEmpty(),
+						"Providers": MatchAllKeys(Keys{
+							"kubernetes": BeEquivalentTo(providerUrn(providerNullOpts)),
+						}),
+					}),
+				}),
+			))
+
+			// --- Directory ---
+
+			// Directory "kustomize-options" with most options
+			g.Expect(rr.Named(stackInfo.RootResource.URN,
+				"kubernetes:kustomize:Directory", "kustomize-options-kustomize-options")).To(HaveExactElements(
+				// quirk: NodeJS SDK applies resource_prefix ("kustomize-options") to the component itself.
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Aliases":           HaveExactElements(Alias("kustomize-options-old"), Alias("kustomize-options-kustomize-options-aliased")),
+						"Protect":           BeTrue(),
+						"Dependencies":      HaveExactElements(string(sleep.URN)),
+						"Provider":          BeEmpty(),
+						"Version":           Equal("1.2.3"),
+						"PluginDownloadURL": Equal("https://a.pulumi.test"),
+						"Providers": MatchAllKeys(Keys{
+							"kubernetes": BeEquivalentTo(providerUrn(providerA)),
+						}),
+						"IgnoreChanges": HaveExactElements("ignored"),
+					}),
+				}),
+			))
+			g.Expect(rr.Named(urn("", "kubernetes:kustomize:Directory", "kustomize-options-kustomize-options"),
+				"kubernetes:core/v1:ConfigMap", "kustomize-options-kustomize-cm-1-2kkk4bthmg")).To(HaveExactElements(
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Aliases":           HaveExactElements(Alias("kustomize-cm-1-2kkk4bthmg-k8s-aliased"), Alias("kustomize-options-kustomize-cm-1-2kkk4bthmg-aliased")),
+						"Protect":           BeTrue(),
+						"Dependencies":      BeEmpty(),
+						"Provider":          BeEquivalentTo(providerUrn(providerA)),
+						"Version":           Equal("1.2.3"),
+						"PluginDownloadURL": Equal("https://a.pulumi.test"),
+						"Providers":         BeEmpty(),
+						"IgnoreChanges":     BeEmpty(),
+						"Object": PointTo(ProtobufStruct(MatchKeys(IgnoreExtras, Keys{
+							"metadata": MatchKeys(IgnoreExtras, Keys{
+								"name":        Equal("kustomize-cm-1-2kkk4bthmg"),
+								"annotations": And(HaveKey("transformed")),
+							}),
+						}))),
+					}),
+				}),
+			))
+
+			// Directory "kustomize-provider" with "provider" option that should propagate to children.
+			g.Expect(rr.Named(stackInfo.RootResource.URN,
+				"kubernetes:kustomize:Directory", "kustomize-provider-kustomize-provider")).To(HaveExactElements(
+				// quirk: NodeJS SDK applies resource_prefix ("kustomize-provider") to the component itself.
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Provider": BeEmpty(),
+						"Version":  BeEmpty(),
+						"Providers": MatchAllKeys(Keys{
+							"kubernetes": BeEquivalentTo(providerUrn(providerB)),
+						}),
+					}),
+				}),
+			))
+			g.Expect(rr.Named(urn("", "kubernetes:kustomize:Directory", "kustomize-provider-kustomize-provider"),
+				"kubernetes:core/v1:ConfigMap", "kustomize-provider-kustomize-cm-1-2kkk4bthmg")).To(HaveExactElements(
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Provider":  BeEquivalentTo(providerUrn(providerB)),
+						"Version":   Not(BeEmpty()),
+						"Providers": BeEmpty(),
+					}),
+				}),
+			))
+
+			// Directory "kustomize-nullopts" with a stack transform to apply a "provider" option.
+			g.Expect(rr.Named(stackInfo.RootResource.URN,
+				"kubernetes:kustomize:Directory", "kustomize-nullopts-kustomize-nullopts")).To(HaveExactElements(
+				// quirk: NodeJS SDK applies resource_prefix ("kustomize-nullopts") to the component itself.
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Provider": BeEmpty(),
+						"Version":  BeEmpty(),
+						"Providers": MatchAllKeys(Keys{
+							"kubernetes": BeEquivalentTo(providerUrn(providerNullOpts)),
+						}),
+					}),
+				}),
+			))
+
+			// --- Chart ---
+
+			// Chart "chart-options"
+			g.Expect(rr.Named(stackInfo.RootResource.URN,
+				"kubernetes:helm.sh/v3:Chart", "chart-options-chart-options")).To(HaveExactElements(
+				// quirk: NodeJS SDK applies resource_prefix ("chart-options") to the component itself.
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Aliases": HaveExactElements(
+							Alias(tokens.Type("kubernetes:helm.sh/v2:Chart")),
+							Alias("chart-options-old"),
+							Alias("chart-options-chart-options-aliased")),
+						"Protect":           BeTrue(),
+						"Dependencies":      HaveExactElements(string(sleep.URN)),
+						"Provider":          BeEmpty(),
+						"Version":           Equal("1.2.3"),
+						"PluginDownloadURL": Equal("https://a.pulumi.test"),
+						"Providers": MatchAllKeys(Keys{
+							"kubernetes": BeEquivalentTo(providerUrn(providerA)),
+						}),
+						"IgnoreChanges": HaveExactElements("ignored"),
+					}),
+				}),
+			))
+			g.Expect(rr.Named(urn("", "kubernetes:helm.sh/v3:Chart", "chart-options-chart-options"),
+				"kubernetes:core/v1:ConfigMap", "chart-options-chart-options-chart-options-cm-1")).To(HaveExactElements(
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Aliases":           HaveExactElements(Alias("chart-options-chart-options-cm-1-k8s-aliased"), Alias("chart-options-chart-options-chart-options-cm-1-aliased")),
+						"Protect":           BeTrue(),
+						"Dependencies":      BeEmpty(),
+						"Provider":          BeEquivalentTo(providerUrn(providerA)),
+						"Version":           Equal("1.2.3"),
+						"PluginDownloadURL": Equal("https://a.pulumi.test"),
+						"Providers":         BeEmpty(),
+						"IgnoreChanges":     BeEmpty(),
+						"Object": PointTo(ProtobufStruct(MatchKeys(IgnoreExtras, Keys{
+							"metadata": MatchKeys(IgnoreExtras, Keys{
+								"name":        Equal("chart-options-chart-options-cm-1"), // note: based on the Helm Release name
+								"annotations": And(HaveKey("pulumi.com/skipAwait")),
+							}),
+						}))),
+					}),
+				}),
+			))
+
+			// Chart "chart-provider" with "provider" option that should propagate to children.
+			g.Expect(rr.Named(stackInfo.RootResource.URN,
+				"kubernetes:helm.sh/v3:Chart", "chart-provider-chart-provider")).To(HaveExactElements(
+				// quirk: NodeJS SDK applies resource_prefix ("chart-provider") to the component itself.
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Provider": BeEmpty(),
+						"Version":  BeEmpty(),
+						"Providers": MatchAllKeys(Keys{
+							"kubernetes": BeEquivalentTo(providerUrn(providerB)),
+						}),
+					}),
+				}),
+			))
+			g.Expect(rr.Named(urn("", "kubernetes:helm.sh/v3:Chart", "chart-provider-chart-provider"),
+				"kubernetes:core/v1:ConfigMap", "chart-provider-chart-provider-chart-provider-cm-1")).To(HaveExactElements(
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Provider":  BeEquivalentTo(providerUrn(providerB)),
+						"Version":   Not(BeEmpty()),
+						"Providers": BeEmpty(),
+					}),
+				}),
+			))
+
+			// Chart "chart-nullopts" with a stack transform to apply a "provider" option.
+			g.Expect(rr.Named(stackInfo.RootResource.URN,
+				"kubernetes:helm.sh/v3:Chart", "chart-nullopts-chart-nullopts")).To(HaveExactElements(
+				// quirk: NodeJS SDK applies resource_prefix ("chart-options") to the component itself.
+				MatchFields(IgnoreExtras, Fields{
+					"Request": MatchFields(IgnoreExtras, Fields{
+						"Provider": BeEmpty(),
+						"Version":  BeEmpty(),
+						"Providers": MatchAllKeys(Keys{
+							"kubernetes": BeEquivalentTo(providerUrn(providerNullOpts)),
+						}),
+					}),
+				}),
+			))
+		},
+	})
+
+	pt := integration.ProgramTestManualLifeCycle(t, &options)
+
+	err = pt.TestLifeCyclePrepare()
+	require.NoError(t, err)
+	t.Cleanup(pt.TestCleanUp)
+	err = pt.TestLifeCycleInitialize()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		// to ensure cleanup, we need to unprotected all resources
+		err = pt.RunPulumiCommand("state", "unprotect", "--all", "-y")
+		contract.IgnoreError(err)
+
+		destroyErr := pt.TestLifeCycleDestroy()
+		contract.IgnoreError(destroyErr)
+	})
+
+	err = pt.TestPreviewUpdateAndEdits()
+	require.NoError(t, err)
 }

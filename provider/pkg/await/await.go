@@ -24,15 +24,16 @@ import (
 	fluxssa "github.com/fluxcd/pkg/ssa"
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/clients"
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/cluster"
+	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/host"
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/kinds"
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/logging"
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/metadata"
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/openapi"
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/retry"
 	"github.com/pulumi/pulumi-kubernetes/provider/v4/pkg/ssa"
-	pulumiprovider "github.com/pulumi/pulumi/pkg/v3/resource/provider"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/diag"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	logger "github.com/pulumi/pulumi/sdk/v3/go/common/util/logging"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -62,7 +63,7 @@ import (
 
 type ProviderConfig struct {
 	Context           context.Context
-	Host              *pulumiprovider.HostClient
+	Host              host.HostClient
 	URN               resource.URN
 	InitialAPIVersion string
 	FieldManager      string
@@ -72,6 +73,9 @@ type ProviderConfig struct {
 	ClientSet   *clients.DynamicClientSet
 	DedupLogger *logging.DedupLogger
 	Resources   k8sopenapi.Resources
+
+	// explicit awaiters (for testing purposes)
+	awaiters map[string]awaitSpec
 }
 
 type CreateConfig struct {
@@ -90,10 +94,11 @@ type ReadConfig struct {
 
 type UpdateConfig struct {
 	ProviderConfig
-	Previous *unstructured.Unstructured
-	Inputs   *unstructured.Unstructured
-	Timeout  float64
-	Preview  bool
+	OldInputs  *unstructured.Unstructured
+	OldOutputs *unstructured.Unstructured
+	Inputs     *unstructured.Unstructured
+	Timeout    float64
+	Preview    bool
 	// IgnoreChanges is a list of fields to ignore when diffing the old and new objects.
 	IgnoreChanges []string
 }
@@ -101,6 +106,7 @@ type UpdateConfig struct {
 type DeleteConfig struct {
 	ProviderConfig
 	Inputs  *unstructured.Unstructured
+	Outputs *unstructured.Unstructured
 	Name    string
 	Timeout float64
 }
@@ -172,7 +178,7 @@ func Creation(c CreateConfig) (*unstructured.Unstructured, error) {
 			// server API, at which point they should hopefully succeed.
 			var err error
 			if client == nil {
-				client, err = c.ClientSet.ResourceClient(c.Inputs.GroupVersionKind(), c.Inputs.GetNamespace())
+				client, err = c.ClientSet.ResourceClientForObject(c.Inputs)
 				if err != nil {
 					if skip, version := skipRetry(c.Inputs.GroupVersionKind(), c.ClusterVersion, err); skip {
 						return &kinds.RemovedAPIError{
@@ -241,6 +247,8 @@ func Creation(c CreateConfig) (*unstructured.Unstructured, error) {
 	}
 	_ = clearStatus(c.Context, c.Host, c.URN)
 
+	contract.Assertf(outputs.GetAPIVersion() == c.Inputs.GetAPIVersion(), "expected APIVersion %q to be %q", outputs.GetAPIVersion(), c.Inputs.GetAPIVersion())
+
 	if c.Preview {
 		return outputs, nil
 	}
@@ -248,28 +256,32 @@ func Creation(c CreateConfig) (*unstructured.Unstructured, error) {
 	// Wait until create resolves as success or error. Note that the conditional is set up to log
 	// only if we don't have an entry for the resource type; in the event that we do, but the await
 	// logic is blank, simply do nothing instead of logging.
-	id := fmt.Sprintf("%s/%s", c.Inputs.GetAPIVersion(), c.Inputs.GetKind())
-	if awaiter, exists := awaiters[id]; exists {
+	id := fmt.Sprintf("%s/%s", outputs.GetAPIVersion(), outputs.GetKind())
+	a := awaiters
+	if c.awaiters != nil {
+		a = c.awaiters
+	}
+	if awaiter, exists := a[id]; exists {
 		if metadata.SkipAwaitLogic(c.Inputs) {
-			logger.V(1).Infof("Skipping await logic for %v", c.Inputs.GetName())
+			logger.V(1).Infof("Skipping await logic for %v", outputs.GetName())
 		} else {
 			if awaiter.awaitCreation != nil {
+				timeout := metadata.TimeoutDuration(c.Timeout, c.Inputs)
 				conf := createAwaitConfig{
-					host:              c.Host,
 					ctx:               c.Context,
 					urn:               c.URN,
 					initialAPIVersion: c.InitialAPIVersion,
 					clientSet:         c.ClientSet,
-					currentInputs:     c.Inputs,
 					currentOutputs:    outputs,
 					logger:            c.DedupLogger,
-					timeout:           c.Timeout,
+					timeout:           timeout,
 					clusterVersion:    c.ClusterVersion,
 				}
 				waitErr := awaiter.awaitCreation(conf)
 				if waitErr != nil {
 					return nil, waitErr
 				}
+				_ = clearStatus(c.Context, c.Host, c.URN)
 			}
 		}
 	} else {
@@ -280,7 +292,7 @@ func Creation(c CreateConfig) (*unstructured.Unstructured, error) {
 	// If the client fails to get the live object for some reason, DO NOT return the error. This
 	// will leak the fact that the object was successfully created. Instead, fall back to the
 	// last-seen live object.
-	live, err := client.Get(c.Context, c.Inputs.GetName(), metav1.GetOptions{})
+	live, err := client.Get(c.Context, outputs.GetName(), metav1.GetOptions{})
 	if err != nil {
 		return outputs, nil
 	}
@@ -289,7 +301,7 @@ func Creation(c CreateConfig) (*unstructured.Unstructured, error) {
 
 // Read checks a resource, returning the object if it was created and initialized successfully.
 func Read(c ReadConfig) (*unstructured.Unstructured, error) {
-	client, err := c.ClientSet.ResourceClient(c.Inputs.GroupVersionKind(), c.Inputs.GetNamespace())
+	client, err := c.ClientSet.ResourceClientForObject(c.Inputs)
 	if err != nil {
 		return nil, err
 	}
@@ -298,24 +310,30 @@ func Read(c ReadConfig) (*unstructured.Unstructured, error) {
 	outputs, err := client.Get(c.Context, c.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
-	} else if c.ReadFromCluster {
+	}
+
+	contract.Assertf(outputs.GetAPIVersion() == c.Inputs.GetAPIVersion(), "expected APIVersion %q to be %q", outputs.GetAPIVersion(), c.Inputs.GetAPIVersion())
+
+	if c.ReadFromCluster {
 		// If the resource is read from a .get or an import, simply return the resource state from the cluster.
 		return outputs, nil
 	}
 
 	id := fmt.Sprintf("%s/%s", outputs.GetAPIVersion(), outputs.GetKind())
-	if awaiter, exists := awaiters[id]; exists {
+	a := awaiters
+	if c.awaiters != nil {
+		a = c.awaiters
+	}
+	if awaiter, exists := a[id]; exists {
 		if metadata.SkipAwaitLogic(c.Inputs) {
 			logger.V(1).Infof("Skipping await logic for %v", c.Inputs.GetName())
 		} else {
 			if awaiter.awaitRead != nil {
 				conf := createAwaitConfig{
-					host:              c.Host,
 					ctx:               c.Context,
 					urn:               c.URN,
 					initialAPIVersion: c.InitialAPIVersion,
 					clientSet:         c.ClientSet,
-					currentInputs:     c.Inputs,
 					currentOutputs:    outputs,
 					logger:            c.DedupLogger,
 					clusterVersion:    c.ClusterVersion,
@@ -324,12 +342,13 @@ func Read(c ReadConfig) (*unstructured.Unstructured, error) {
 				if waitErr != nil {
 					return nil, waitErr
 				}
+				_ = clearStatus(c.Context, c.Host, c.URN)
 			}
 		}
+	} else {
+		logger.V(1).Infof(
+			"No read logic found for object of type %q; falling back to retrieving object", id)
 	}
-
-	logger.V(1).Infof(
-		"No read logic found for object of type %q; falling back to retrieving object", id)
 
 	// If the client fails to get the live object for some reason, DO NOT return the error. This
 	// will leak the fact that the object was successfully created. Instead, fall back to the
@@ -360,15 +379,20 @@ func Update(c UpdateConfig) (*unstructured.Unstructured, error) {
 
 	// Get the "live" version of the last submitted object. This is necessary because the server may
 	// have populated some fields automatically, updated status fields, and so on.
-	liveOldObj, err := client.Get(c.Context, c.Previous.GetName(), metav1.GetOptions{})
+	liveOldObj, err := client.Get(c.Context, c.OldOutputs.GetName(), metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
+
+	contract.Assertf(liveOldObj.GetAPIVersion() == c.Inputs.GetAPIVersion(), "expected APIVersion %q to be %q", liveOldObj.GetAPIVersion(), c.Inputs.GetAPIVersion())
 
 	currentOutputs, err := updateResource(&c, liveOldObj, client)
 	if err != nil {
 		return nil, err
 	}
+
+	contract.Assertf(currentOutputs.GetAPIVersion() == c.Inputs.GetAPIVersion(), "expected APIVersion %q to be %q", currentOutputs.GetAPIVersion(), c.Inputs.GetAPIVersion())
+
 	if c.Preview {
 		// We do not need to get the updated live object if we are in preview mode.
 		return currentOutputs, nil
@@ -377,49 +401,55 @@ func Update(c UpdateConfig) (*unstructured.Unstructured, error) {
 	// Wait until patch resolves as success or error. Note that the conditional is set up to log only
 	// if we don't have an entry for the resource type; in the event that we do, but the await logic
 	// is blank, simply do nothing instead of logging.
-	id := fmt.Sprintf("%s/%s", c.Inputs.GetAPIVersion(), c.Inputs.GetKind())
-	if awaiter, exists := awaiters[id]; exists {
+	id := fmt.Sprintf("%s/%s", currentOutputs.GetAPIVersion(), currentOutputs.GetKind())
+	a := awaiters
+	if c.awaiters != nil {
+		a = c.awaiters
+	}
+	if awaiter, exists := a[id]; exists {
 		if metadata.SkipAwaitLogic(c.Inputs) {
-			logger.V(1).Infof("Skipping await logic for %v", c.Inputs.GetName())
+			logger.V(1).Infof("Skipping await logic for %v", currentOutputs.GetName())
 		} else {
 			if awaiter.awaitUpdate != nil {
+				timeout := metadata.TimeoutDuration(c.Timeout, c.Inputs)
 				conf := updateAwaitConfig{
 					createAwaitConfig: createAwaitConfig{
-						host:              c.Host,
 						ctx:               c.Context,
 						urn:               c.URN,
 						initialAPIVersion: c.InitialAPIVersion,
 						clientSet:         c.ClientSet,
-						currentInputs:     c.Inputs,
 						currentOutputs:    currentOutputs,
 						logger:            c.DedupLogger,
-						timeout:           c.Timeout,
+						timeout:           timeout,
 						clusterVersion:    c.ClusterVersion,
 					},
-					lastInputs:  c.Previous,
 					lastOutputs: liveOldObj,
 				}
 				waitErr := awaiter.awaitUpdate(conf)
 				if waitErr != nil {
 					return nil, waitErr
 				}
+				_ = clearStatus(c.Context, c.Host, c.URN)
 			}
 		}
 	} else {
 		logger.V(1).Infof("No initialization logic found for object of type %q; assuming initialization successful", id)
 	}
 
-	gvk := c.Inputs.GroupVersionKind()
+	gvk := currentOutputs.GroupVersionKind()
 	logger.V(3).Infof("Resource %s/%s/%s  '%s.%s' patched and updated", gvk.Group, gvk.Version,
-		gvk.Kind, c.Inputs.GetNamespace(), c.Inputs.GetName())
+		gvk.Kind, currentOutputs.GetNamespace(), currentOutputs.GetName())
 
 	// If the client fails to get the live object for some reason, DO NOT return the error. This
 	// will leak the fact that the object was successfully created. Instead, fall back to the
 	// last-seen live object.
-	live, err := client.Get(c.Context, c.Inputs.GetName(), metav1.GetOptions{})
+	live, err := client.Get(c.Context, currentOutputs.GetName(), metav1.GetOptions{})
 	if err != nil {
 		return currentOutputs, nil
 	}
+
+	contract.Assertf(live.GetAPIVersion() == c.Inputs.GetAPIVersion(), "expected APIVersion %q to be %q", live.GetAPIVersion(), c.Inputs.GetAPIVersion())
+
 	return live, nil
 }
 
@@ -450,7 +480,7 @@ func csaUpdate(c *UpdateConfig, liveOldObj *unstructured.Unstructured, client dy
 	// optimistically rather than failing the update.
 	_ = handleCSAIgnoreFields(c, liveOldObj)
 	// Create merge patch (prefer strategic merge patch, fall back to JSON merge patch).
-	patch, patchType, _, err := openapi.PatchForResourceUpdate(c.Resources, c.Previous, c.Inputs, liveOldObj)
+	patch, patchType, _, err := openapi.PatchForResourceUpdate(c.Resources, c.OldInputs, c.Inputs, liveOldObj)
 	if err != nil {
 		return nil, err
 	}
@@ -462,7 +492,7 @@ func csaUpdate(c *UpdateConfig, liveOldObj *unstructured.Unstructured, client dy
 		options.DryRun = []string{metav1.DryRunAll}
 	}
 
-	return client.Patch(c.Context, c.Inputs.GetName(), patchType, patch, options)
+	return client.Patch(c.Context, liveOldObj.GetName(), patchType, patch, options)
 }
 
 // ssaUpdate handles the logic for updating a resource using server-side apply.
@@ -490,7 +520,7 @@ func ssaUpdate(c *UpdateConfig, liveOldObj *unstructured.Unstructured, client dy
 		options.DryRun = []string{metav1.DryRunAll}
 	}
 
-	currentOutputs, err := client.Patch(c.Context, c.Inputs.GetName(), types.ApplyPatchType, objYAML, options)
+	currentOutputs, err := client.Patch(c.Context, liveOldObj.GetName(), types.ApplyPatchType, objYAML, options)
 	if err != nil {
 		if errors.IsConflict(err) {
 			err = fmt.Errorf("Server-Side Apply field conflict detected. See %s for troubleshooting help\n: %w",
@@ -538,12 +568,11 @@ func handleSSAIgnoreFields(c *UpdateConfig, liveOldObj *unstructured.Unstructure
 	managedFields := liveOldObj.GetManagedFields()
 	// Keep track of fields that are managed by the current field manager, and fields that are managed by other field managers.
 	theirFields, ourFields := new(fieldpath.Set), new(fieldpath.Set)
-	fieldpath.MakePathOrDie()
 
 	for _, f := range managedFields {
 		s, err := fluxssa.FieldsToSet(*f.FieldsV1)
 		if err != nil {
-			return fmt.Errorf("unable to parse managed fields from resource %q into fieldpath.Set: %w", c.Inputs.GetName(), err)
+			return fmt.Errorf("unable to parse managed fields from resource %q into fieldpath.Set: %w", liveOldObj.GetName(), err)
 		}
 
 		switch f.Manager {
@@ -553,6 +582,10 @@ func handleSSAIgnoreFields(c *UpdateConfig, liveOldObj *unstructured.Unstructure
 			theirFields = theirFields.Union(&s)
 		}
 	}
+
+	// Add all parent paths of the fields to the set.
+	theirFields = ensureFieldsAreMembers(theirFields)
+	ourFields = ensureFieldsAreMembers(ourFields)
 
 	for _, ignorePath := range c.IgnoreChanges {
 		ipParsed, err := resource.ParsePropertyPath(ignorePath)
@@ -615,10 +648,24 @@ func makeInterfaceSlice[T any](inputs []T) []interface{} {
 	return s
 }
 
+// ensureFieldsAreMembers adds all parent paths of a given fieldpath.Set back to the set. The fieldpath.Set.Insert method specifically mentions that it does not
+// add parent paths, so we need to do this manually. We do this by iterating from the start of the path to the end, and
+// adding each level of the path tree to the set.
+func ensureFieldsAreMembers(s *fieldpath.Set) *fieldpath.Set {
+	newSet := new(fieldpath.Set)
+	s.Iterate(func(p fieldpath.Path) {
+		for i := range p {
+			newSet.Insert(p[:i+1])
+		}
+	})
+
+	return newSet
+}
+
 // fixCSAFieldManagers patches the field managers for an existing resource that was managed using client-side apply.
 // The new server-side apply field manager takes ownership of all these fields to avoid conflicts.
 func fixCSAFieldManagers(c *UpdateConfig, liveOldObj *unstructured.Unstructured, client dynamic.ResourceInterface) (*unstructured.Unstructured, error) {
-	if kinds.PatchQualifiedTypes.Has(c.URN.QualifiedType().String()) {
+	if kinds.IsPatchURN(c.URN) {
 		// When dealing with a patch resource, there's no need to patch the field managers.
 		// Doing so would inadvertently make us responsible for managing fields that are not relevant to us during updates,
 		// which occurs when reusing a patch resource. Patch resources do not need to worry about other fields
@@ -706,19 +753,22 @@ func Deletion(c DeleteConfig) error {
 	}
 
 	// Obtain client for the resource being deleted.
-	client, err := c.ClientSet.ResourceClientForObject(c.Inputs)
+	client, err := c.ClientSet.ResourceClientForObject(c.Outputs)
 	if err != nil {
 		return nilIfGVKDeleted(err)
 	}
 
-	patchResource := kinds.PatchQualifiedTypes.Has(c.URN.QualifiedType().String())
+	patchResource := kinds.IsPatchURN(c.URN)
 	if c.ServerSideApply && patchResource {
-		err = ssa.Relinquish(c.Context, client, c.Inputs, c.FieldManager)
+		err = ssa.Relinquish(c.Context, client, c.Outputs, c.FieldManager)
 		return err
 	}
 
-	timeout := metadata.TimeoutDuration(c.Timeout, c.Inputs, 300)
-	timeoutSeconds := int64(timeout.Seconds())
+	timeout := metadata.TimeoutDuration(c.Timeout, c.Inputs)
+	var timeoutSeconds int64 = 300
+	if timeout != nil {
+		timeoutSeconds = int64(timeout.Seconds())
+	}
 	listOpts := metav1.ListOptions{
 		FieldSelector:  fields.OneTermEqualSelector("metadata.name", c.Name).String(),
 		TimeoutSeconds: &timeoutSeconds,
@@ -739,25 +789,33 @@ func Deletion(c DeleteConfig) error {
 	// if we don't have an entry for the resource type; in the event that we do, but the await logic
 	// is blank, simply do nothing instead of logging.
 	var waitErr error
-	id := fmt.Sprintf("%s/%s", c.Inputs.GetAPIVersion(), c.Inputs.GetKind())
-	if awaiter, exists := awaiters[id]; exists && awaiter.awaitDeletion != nil {
+	id := fmt.Sprintf("%s/%s", c.Outputs.GetAPIVersion(), c.Outputs.GetKind())
+	a := awaiters
+	if c.awaiters != nil {
+		a = c.awaiters
+	}
+	if awaiter, exists := a[id]; exists && awaiter.awaitDeletion != nil {
 		if metadata.SkipAwaitLogic(c.Inputs) {
-			logger.V(1).Infof("Skipping await logic for %v", c.Inputs.GetName())
+			logger.V(1).Infof("Skipping await logic for %v", c.Name)
 		} else {
+			timeout := metadata.TimeoutDuration(c.Timeout, c.Inputs)
 			waitErr = awaiter.awaitDeletion(deleteAwaitConfig{
 				createAwaitConfig: createAwaitConfig{
-					host:              c.Host,
 					ctx:               c.Context,
 					urn:               c.URN,
 					initialAPIVersion: c.InitialAPIVersion,
 					clientSet:         c.ClientSet,
-					currentInputs:     c.Inputs,
+					currentOutputs:    c.Outputs,
 					logger:            c.DedupLogger,
-					timeout:           c.Timeout,
+					timeout:           timeout,
 					clusterVersion:    c.ClusterVersion,
 				},
 				clientForResource: client,
 			})
+			if waitErr != nil {
+				return waitErr
+			}
+			_ = clearStatus(c.Context, c.Host, c.URN)
 		}
 	} else {
 		for {
@@ -809,7 +867,7 @@ func Deletion(c DeleteConfig) error {
 		}
 	}
 
-	return waitErr
+	return nil
 }
 
 // deleteResource deletes the specified resource using foreground cascading delete.
@@ -835,7 +893,7 @@ func checkIfResourceDeleted(
 }
 
 // clearStatus will clear the `Info` column of the CLI of all statuses and messages.
-func clearStatus(context context.Context, host *pulumiprovider.HostClient, urn resource.URN) error {
+func clearStatus(context context.Context, host host.HostClient, urn resource.URN) error {
 	return host.LogStatus(context, diag.Info, urn, "")
 }
 

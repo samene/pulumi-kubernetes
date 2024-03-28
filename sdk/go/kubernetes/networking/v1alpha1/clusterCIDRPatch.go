@@ -10,7 +10,6 @@ import (
 	metav1 "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/meta/v1"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/utilities"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumix"
 )
 
 // Patch resources are used to modify existing Kubernetes resources by using
@@ -29,7 +28,7 @@ type ClusterCIDRPatch struct {
 	Kind pulumi.StringPtrOutput `pulumi:"kind"`
 	// Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	Metadata metav1.ObjectMetaPatchPtrOutput `pulumi:"metadata"`
-	// spec is the desired state of the ClusterCIDR. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// Spec is the desired state of the ClusterCIDR. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	Spec ClusterCIDRSpecPatchPtrOutput `pulumi:"spec"`
 }
 
@@ -81,7 +80,7 @@ type clusterCIDRPatchArgs struct {
 	Kind *string `pulumi:"kind"`
 	// Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	Metadata *metav1.ObjectMetaPatch `pulumi:"metadata"`
-	// spec is the desired state of the ClusterCIDR. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// Spec is the desired state of the ClusterCIDR. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	Spec *ClusterCIDRSpecPatch `pulumi:"spec"`
 }
 
@@ -93,7 +92,7 @@ type ClusterCIDRPatchArgs struct {
 	Kind pulumi.StringPtrInput
 	// Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	Metadata metav1.ObjectMetaPatchPtrInput
-	// spec is the desired state of the ClusterCIDR. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// Spec is the desired state of the ClusterCIDR. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	Spec ClusterCIDRSpecPatchPtrInput
 }
 
@@ -118,12 +117,6 @@ func (i *ClusterCIDRPatch) ToClusterCIDRPatchOutput() ClusterCIDRPatchOutput {
 
 func (i *ClusterCIDRPatch) ToClusterCIDRPatchOutputWithContext(ctx context.Context) ClusterCIDRPatchOutput {
 	return pulumi.ToOutputWithContext(ctx, i).(ClusterCIDRPatchOutput)
-}
-
-func (i *ClusterCIDRPatch) ToOutput(ctx context.Context) pulumix.Output[*ClusterCIDRPatch] {
-	return pulumix.Output[*ClusterCIDRPatch]{
-		OutputState: i.ToClusterCIDRPatchOutputWithContext(ctx).OutputState,
-	}
 }
 
 // ClusterCIDRPatchArrayInput is an input type that accepts ClusterCIDRPatchArray and ClusterCIDRPatchArrayOutput values.
@@ -151,12 +144,6 @@ func (i ClusterCIDRPatchArray) ToClusterCIDRPatchArrayOutputWithContext(ctx cont
 	return pulumi.ToOutputWithContext(ctx, i).(ClusterCIDRPatchArrayOutput)
 }
 
-func (i ClusterCIDRPatchArray) ToOutput(ctx context.Context) pulumix.Output[[]*ClusterCIDRPatch] {
-	return pulumix.Output[[]*ClusterCIDRPatch]{
-		OutputState: i.ToClusterCIDRPatchArrayOutputWithContext(ctx).OutputState,
-	}
-}
-
 // ClusterCIDRPatchMapInput is an input type that accepts ClusterCIDRPatchMap and ClusterCIDRPatchMapOutput values.
 // You can construct a concrete instance of `ClusterCIDRPatchMapInput` via:
 //
@@ -182,12 +169,6 @@ func (i ClusterCIDRPatchMap) ToClusterCIDRPatchMapOutputWithContext(ctx context.
 	return pulumi.ToOutputWithContext(ctx, i).(ClusterCIDRPatchMapOutput)
 }
 
-func (i ClusterCIDRPatchMap) ToOutput(ctx context.Context) pulumix.Output[map[string]*ClusterCIDRPatch] {
-	return pulumix.Output[map[string]*ClusterCIDRPatch]{
-		OutputState: i.ToClusterCIDRPatchMapOutputWithContext(ctx).OutputState,
-	}
-}
-
 type ClusterCIDRPatchOutput struct{ *pulumi.OutputState }
 
 func (ClusterCIDRPatchOutput) ElementType() reflect.Type {
@@ -200,12 +181,6 @@ func (o ClusterCIDRPatchOutput) ToClusterCIDRPatchOutput() ClusterCIDRPatchOutpu
 
 func (o ClusterCIDRPatchOutput) ToClusterCIDRPatchOutputWithContext(ctx context.Context) ClusterCIDRPatchOutput {
 	return o
-}
-
-func (o ClusterCIDRPatchOutput) ToOutput(ctx context.Context) pulumix.Output[*ClusterCIDRPatch] {
-	return pulumix.Output[*ClusterCIDRPatch]{
-		OutputState: o.OutputState,
-	}
 }
 
 // APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
@@ -223,7 +198,7 @@ func (o ClusterCIDRPatchOutput) Metadata() metav1.ObjectMetaPatchPtrOutput {
 	return o.ApplyT(func(v *ClusterCIDRPatch) metav1.ObjectMetaPatchPtrOutput { return v.Metadata }).(metav1.ObjectMetaPatchPtrOutput)
 }
 
-// spec is the desired state of the ClusterCIDR. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+// Spec is the desired state of the ClusterCIDR. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 func (o ClusterCIDRPatchOutput) Spec() ClusterCIDRSpecPatchPtrOutput {
 	return o.ApplyT(func(v *ClusterCIDRPatch) ClusterCIDRSpecPatchPtrOutput { return v.Spec }).(ClusterCIDRSpecPatchPtrOutput)
 }
@@ -240,12 +215,6 @@ func (o ClusterCIDRPatchArrayOutput) ToClusterCIDRPatchArrayOutput() ClusterCIDR
 
 func (o ClusterCIDRPatchArrayOutput) ToClusterCIDRPatchArrayOutputWithContext(ctx context.Context) ClusterCIDRPatchArrayOutput {
 	return o
-}
-
-func (o ClusterCIDRPatchArrayOutput) ToOutput(ctx context.Context) pulumix.Output[[]*ClusterCIDRPatch] {
-	return pulumix.Output[[]*ClusterCIDRPatch]{
-		OutputState: o.OutputState,
-	}
 }
 
 func (o ClusterCIDRPatchArrayOutput) Index(i pulumi.IntInput) ClusterCIDRPatchOutput {
@@ -266,12 +235,6 @@ func (o ClusterCIDRPatchMapOutput) ToClusterCIDRPatchMapOutput() ClusterCIDRPatc
 
 func (o ClusterCIDRPatchMapOutput) ToClusterCIDRPatchMapOutputWithContext(ctx context.Context) ClusterCIDRPatchMapOutput {
 	return o
-}
-
-func (o ClusterCIDRPatchMapOutput) ToOutput(ctx context.Context) pulumix.Output[map[string]*ClusterCIDRPatch] {
-	return pulumix.Output[map[string]*ClusterCIDRPatch]{
-		OutputState: o.OutputState,
-	}
 }
 
 func (o ClusterCIDRPatchMapOutput) MapIndex(k pulumi.StringInput) ClusterCIDRPatchOutput {
